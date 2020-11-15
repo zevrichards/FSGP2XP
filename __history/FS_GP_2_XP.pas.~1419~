@@ -1,0 +1,2780 @@
+﻿unit FS_GP_2_XP;
+
+interface
+
+uses
+  Winapi.Windows, Winapi.Messages, System.SysUtils, System.IOUtils, System.StrUtils, System.Variants, System.Classes,
+  System.Types, Vcl.Graphics,
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.ExtDlgs, System.Generics.collections, System.Generics.Defaults, System.Math, RSCommonFunctions,
+  Vcl.ComCtrls;
+
+type TWED = class
+  id: integer;
+  name: string;
+end;
+
+type TWED_Group = class(TWED)
+  parent_id: integer;
+  children: TList<integer>;
+end;
+
+type TWED_DrapedOrthophoto = class(TWED_Group)
+  heading: real;
+  resource: string;
+  Group: string;
+  TexTop, TexBottom, TexLeft, TexRight: real;
+end;
+
+type TWED_Ring = class(TWED_DrapedOrthophoto) //or TWED_PolygonPlacement
+  isHole: boolean;
+end;
+
+type TWED_TextureBezierNode = class(TWED_Ring)
+  longitude,latitude: string;
+  X,Y: real;
+  S,T: real;
+end;
+
+type TWED_LinePlacement = class(TWED_Group)
+  closed: boolean;
+  resource: string;
+  LineStartList: TList<Integer>;
+  LineEndList: TList<Integer>;
+end;
+
+type TWED_SimpleBezierBoundaryNode = class(TWED_LinePlacement)
+  longitude,latitude: string;
+  X,Y: real;
+  vertex: integer;
+end;
+
+type TWED_RampPosition = class(TWED_Group)
+  index, lat, long, heading, ramptype: string;
+{  traffic: integer;}
+  width_letter, ramp_op_type, airlines, TrafficBinary: string;
+  isVehicleParking: boolean;
+end;
+
+type TWED_TaxiRoute = class(TWED_Group)
+  sources: TList<integer>;
+  vehicle_class: string;
+{  oneway: boolean;
+  runway, } width_letter: string;
+end;
+
+type TWED_TaxiRouteNode = class(TWED_Group)
+  viewers: TList<integer>;
+  taxinodetype, longitude,latitude: string;
+end;
+
+type TWED_TruckParkingLocation = class(TWED_Group)
+  heading, trucktype, longitude, latitude: string;
+end;
+
+type TWED_ObjPlacement = class(TWED_Group)
+  heading, resource, longitude, latitude, MSL: string;
+  customMSL: boolean;
+end;
+
+type TWED_AirportNode = class(TWED_Group)
+  marking, longitude, latitude: string;
+end;
+
+type TWED_AirportChain = class(TWED_Group)
+  closed: boolean;
+end;
+
+type TCoordinate = record
+  long, lat: real
+end;
+
+type TMDLsection = class
+    labelname: string;
+    size: integer;
+    data: Tbytes;
+end;
+
+
+type
+  TForm1 = class(TForm)
+    PageControl1: TPageControl;
+    GPTab: TTabSheet;
+    ParkingTab: TTabSheet;
+    Label1: TLabel;
+    Label2: TLabel;
+    LatEdit: TEdit;
+    LatLabel: TLabel;
+    LongEdit: TEdit;
+    LongLabel: TLabel;
+    OBJButton: TButton;
+    OBJEdit: TEdit;
+    PolEdit: TEdit;
+    PolPathEdit: TEdit;
+    ProcessLinesButton: TButton;
+    ProcessPolysButton: TButton;
+    TexRotEdit: TEdit;
+    TexRotLabel: TLabel;
+    FileOpenDialog1: TFileOpenDialog;
+    OpenTextFileDialog1: TOpenTextFileDialog;
+    Memo1: TMemo;
+    ParkingXMLBtn: TButton;
+    ParkingXMLEdit: TEdit;
+    ProcessADEBtn: TButton;
+    WEDXMLEdit: TEdit;
+    WEDXMLButton: TButton;
+    ObjectTab: TTabSheet;
+    LoadXPOBJBtn: TButton;
+    PlaceOBJBtn: TButton;
+    ObjMemo: TMemo;
+    HeadingEdit: TEdit;
+    Label3: TLabel;
+    Label4: TLabel;
+    OBJLatEdit: TEdit;
+    Label5: TLabel;
+    OBJLongEdit: TEdit;
+    MSLEdit: TEdit;
+    MSLLabel: TLabel;
+    SetMSLCheckBox: TCheckBox;
+    ObjPathEdit: TEdit;
+    Label6: TLabel;
+    ProcessTaxiLightsBtn: TButton;
+    Label9: TLabel;
+    MarkingComboBox: TComboBox;
+    ValidateBtn: TButton;
+    UseXMLBtn: TButton;
+    TabSheet1: TTabSheet;
+    MDLMemo: TMemo;
+    LoadMDLBtn: TButton;
+    CommonNameEdit: TEdit;
+    Label7: TLabel;
+    EditMDLNamesBtn: TButton;
+    procedure OBJButtonClick(Sender: TObject);
+    procedure ProcessPolysButtonClick(Sender: TObject);
+    procedure EnableProcess;
+    function get_new_coordinates_haversine(central_coord:TCoordinate; X,Y: real):Tcoordinate;
+    function get_new_coordinates_vincenty(central_coord:TCoordinate; X,Y: real):Tcoordinate;
+    function GetTextCount(filename, TextToCount, EndString: string):integer;
+    function GetHeaderCommentSize(filename, CommentChar: string):integer;
+    procedure GenerateXML;
+    procedure BuildTaxiLightList;
+    procedure BuildADEList;
+    procedure BuildPolyList;
+    procedure BuildLineList;
+    procedure BuildOBJList;
+    procedure WEDXMLButtonClick(Sender: TObject);
+    procedure ProcessLinesButtonClick(Sender: TObject);
+    procedure NewWedLine(LineStartList, LineEndList: TList<Integer>; aWedLineList:TObjectList<TWed_LinePlacement>);
+    procedure SplitWedLine(aWedLine: TWED_LinePlacement; indexlist: TList<integer>);
+    procedure SwitchSearchDirection(SearchDirection: TDirection);
+    procedure BackupWEDXML;
+    procedure ParkingXMLBtnClick(Sender: TObject);
+    procedure ProcessADEBtnClick(Sender: TObject);
+    procedure ResetGlobalVariables;
+    procedure LoadXPOBJBtnClick(Sender: TObject);
+    procedure PlaceOBJBtnClick(Sender: TObject);
+    procedure TaxiLightObjButtonClick(Sender: TObject);
+    procedure ProcessTaxiLightsBtnClick(Sender: TObject);
+    procedure ValidateBtnClick(Sender: TObject);
+    procedure ValidateWEDXML;
+    procedure Memo1KeyPress(Sender: TObject; var Key: Char);
+    procedure UseXMLBtnClick(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
+    procedure BeforeDestruction; override;
+    procedure ObjPathEditExit(Sender: TObject);
+    procedure PolPathEditExit(Sender: TObject);
+    procedure LoadMDLBtnClick(Sender: TObject);
+    procedure EditMDLNamesBtnClick(Sender: TObject);
+    procedure MDLNameEdit;
+  private
+    { Private declarations }
+  public
+    { Public declarations }
+  end;
+
+var
+  Form1: TForm1;
+  id_count, NodeCount, hole_count, existing_elements: integer;
+  aWedGroup: TWED_Group;
+  WedGroupList: TObjectList<TWed_Group>;
+  aWedOrtho: TWED_DrapedOrthophoto;
+  aWedRing: TWed_Ring;
+  aWedNode: TWED_TextureBezierNode;
+  WedOrthoList: TObjectList<TWED_DrapedOrthophoto>;
+  WedRingList: TObjectList<TWed_Ring>;
+  WedNodeList: TObjectList<TWED_TextureBezierNode>;
+  aWedLine: TWED_LinePlacement;
+  aWedLineNode: TWED_SimpleBezierBoundaryNode;
+  WedLineList: TObjectList<TWED_LinePlacement>;
+  WedLineNodeList: TObjectList<TWED_SimpleBezierBoundaryNode>;
+  IndexList: TList<integer>;
+  aWEDRamp: TWED_RampPosition;
+  WedRampList: TObjectList<TWED_RampPosition>;
+  aWEDTaxiNode: TWED_TaxiRouteNode;
+  TaxiNodeList: TObjectList<TWED_TaxiRouteNode>;
+  aWEDTaxiRoute: TWED_TaxiRoute;
+  TaxiRouteList: TObjectList<TWED_TaxiRoute>;
+  aWEDTruckParking: TWED_TruckParkingLocation;
+  TruckParkingList: TObjectList<TWED_TruckParkingLocation>;
+  aWEDObjPlacement: TWED_ObjPlacement;
+  ObjPlacementList: TObjectList<TWED_ObjPlacement>;
+  AirportNodeList: TObjectList<TWED_AirportNode>;
+  aWEDAirportNode: TWED_AirportNode;
+  AirportChainList: TObjectList<TWED_AirportChain>;
+  aWEDAirportChain: TWED_AirportChain;
+
+
+implementation
+
+{$R *.dfm}
+
+
+procedure TForm1.OBJButtonClick(Sender: TObject);
+begin
+  OpenTextFileDialog1.Filter := 'OBJ files (*.obj)|*.OBJ';
+  OpenTextFileDialog1.options := [];
+  If OpenTextFileDialog1.Execute() then
+  begin
+    OBJEdit.Text := OpenTextFileDialog1.FileName;
+    PolEdit.Text := TPath.GetFileNameWithoutExtension(OBJEdit.Text);
+    EnableProcess;
+
+    ResetGlobalVariables;
+
+  end;
+
+end;
+
+
+procedure TForm1.ObjPathEditExit(Sender: TObject);
+begin
+  If ((ObjPathedit.Text[length(ObjPathedit.Text)] = '\') or (ObjPathedit.Text[length(ObjPathedit.Text)] = '/')) then
+    ObjPathedit.Text := LeftStr(ObjPathedit.Text, length(ObjPathedit.Text)-1);
+end;
+
+procedure TForm1.ParkingXMLBtnClick(Sender: TObject);
+begin
+  OpenTextFileDialog1.Filter := 'XML files (*.xml)|*.XML';
+  OpenTextFileDialog1.options := [];
+  If OpenTextFileDialog1.Execute() then
+  begin
+    ParkingXMLEdit.Text := OpenTextFileDialog1.FileName;
+
+    ResetGlobalVariables;
+
+  end;
+end;
+
+procedure TForm1.PlaceOBJBtnClick(Sender: TObject);
+begin
+  If ObjMemo.Lines.Count = 0 then
+    MessageDlg('Please select X-Plane OBJ files!', mtError, [mbOK], 0)
+  else
+  begin
+    BackupWEDXML;
+
+    //Build the list of Groups, Rings and Nodes
+    BuildOBJList;
+
+    //Build the XML file
+    GenerateXML;
+  end;
+
+end;
+
+procedure TForm1.PolPathEditExit(Sender: TObject);
+begin
+  If ((PolPathedit.Text[length(PolPathedit.Text)] = '\') or (PolPathedit.Text[length(PolPathedit.Text)] = '/')) then
+    PolPathedit.Text := LeftStr(PolPathedit.Text, length(PolPathedit.Text)-1);
+end;
+
+procedure TForm1.ProcessLinesButtonClick(Sender: TObject);
+begin
+
+  If PolEdit.Text = '' then
+    MessageDlg('Specify a .lin file name!', mtError, [mbOK], 0)
+  else
+  begin
+    BackupWEDXML;
+
+    //Build the list of Groups, Rings and Nodes
+    BuildLineList;
+
+    //Build the XML file
+    GenerateXML;
+  end;
+end;
+
+procedure TForm1.ProcessADEBtnClick(Sender: TObject);
+begin
+  BackupWEDXML;
+
+  //Build the list of Ramp Parkings
+  BuildADEList;
+
+  //Build the XML file
+  GenerateXML;
+end;
+
+procedure TForm1.ProcessPolysButtonClick(Sender: TObject);
+begin
+
+  If PolEdit.Text = '' then
+    MessageDlg('Specify a .pol file name!', mtError, [mbOK], 0)
+  else
+  begin
+    BackupWEDXML;
+
+    //Build the list of Groups, Rings and Nodes
+    BuildPolyList;
+
+    //Build the XML file
+    GenerateXML;
+  end;
+end;
+
+procedure TForm1.ProcessTaxiLightsBtnClick(Sender: TObject);
+begin
+  If OBJEdit.Text = '' then
+    MessageDlg('Select a Sketchup OBJ file!', mtError, [mbOK], 0)
+  else
+  begin
+    BackupWEDXML;
+
+    //Build the list of Groups, Rings and Nodes
+    BuildTaxiLightList;
+
+    //Build the XML file
+    GenerateXML;
+  end;
+end;
+
+procedure TForm1.WEDXMLButtonClick(Sender: TObject);
+begin
+//  FileOpenDialog1.Filter := 'Earth.Wed.XML file (earth.wed.xml)|earth.wed.xml';
+  //FileOpenDialog1.Execute();
+  FileOpenDialog1.Options := [fdoPickFolders];
+  //FileOpenDialog1.FileName := 'Earth.Wed.XML';
+  If FileOpenDialog1.Execute() then
+  begin
+    WEDXMLEdit.Text := FileOpenDialog1.FileName+'\Earth.Wed.XML';
+    EnableProcess;
+  end;
+end;
+
+procedure TForm1.EditMDLNamesBtnClick(Sender: TObject);
+begin
+  If MDLMemo.Lines.Count = 0 then
+    MessageDlg('Please select MDL files!', mtError, [mbOK], 0)
+  else
+  begin
+      MDLNameEdit;
+  end;
+end;
+
+procedure TForm1.EnableProcess;
+begin
+  If (OBJEdit.text<>'') and (LatEdit.text<>'') and (LongEdit.text<>'') and (PolPathEdit.Text<>'') and (PolEdit.Text<>'') then
+  begin
+    ProcessPolysButton.enabled := true;
+    ProcessLinesButton.Enabled := true;
+  end;
+end;
+
+procedure TForm1.FormCreate(Sender: TObject);
+var i: integer;
+    installedsims : TArray<integer>;
+    SL: TStringList;
+    BckEvent: TNotifyEvent;
+//    aSwitch : TToggleSwitch;
+    aCheckbox: TCheckbox;
+    aComboBox: TComboBox;
+    aButton: TButton;
+    aEdit: TEdit;
+    aTrackbar: TTrackbar;
+//    PersistentSwitches: TArray<TToggleSwitch>;
+    PersistentCheckBoxes: TArray<TCheckbox>;
+    PersistentComboBoxes: TArray<TComboBox>;
+    PersistentButtons: TArray<TButton>;
+    PersistentEdits: TArray<TEdit>;
+    PersistentTrackbars: Tarray<TTrackbar>;
+
+begin
+//initialize switches, buttons, etc... from .fs file if it exists
+  If FileExists('FSGP2XP.fs') then
+  begin
+
+    for i:=0 to ComponentCount-1 do
+    begin
+//      if (Components[i] is TToggleSwitch) then
+//        TAppender<TToggleSwitch>.Append(PersistentSwitches, Components[i] as TToggleSwitch);
+      if (Components[i] is TCheckbox) then
+        TAppender<TCheckbox>.Append(PersistentCheckBoxes, Components[i] as TCheckbox);
+      if (Components[i] is TComboBox) then
+        TAppender<TComboBox>.Append(PersistentComboBoxes, Components[i] as TComboBox);
+      if (Components[i] is TButton) then
+        TAppender<TButton>.Append(PersistentButtons, Components[i] as TButton);
+      if (Components[i] is TEdit) then
+        TAppender<TEdit>.Append(PersistentEdits, Components[i] as TEdit);
+      if (Components[i] is TTrackbar) then
+        TAppender<TTrackbar>.Append(PersistentTrackbars, Components[i] as TTrackbar);
+
+    end;
+
+    SL := TStringList.Create;
+    try
+      SL.LoadFromFile('FSGP2XP.fs');
+
+//      For aSwitch in PersistentSwitches do
+//      begin
+//        BckEvent :=  aSwitch.OnClick;
+//        aSwitch.OnClick := nil;
+//
+//        If SL.text[Pos(aSwitch.Name+'=',SL.Text)+length(aSwitch.Name+'=')] = '0' then
+//          aSwitch.State := tssOff
+//        else
+//          aSwitch.State := tssOn;
+//
+//        aSwitch.OnClick := BckEvent;
+//      end;
+
+      For aCheckbox in PersistentCheckboxes do
+      begin
+        BckEvent :=  aCheckbox.OnClick;
+        aCheckbox.OnClick := nil;
+
+        If SL.text[Pos(aCheckbox.Name+'=',SL.Text)+length(aCheckbox.Name+'=')] = '0' then
+          aCheckbox.checked := false
+        else
+          aCheckbox.checked := true;
+
+        aCheckbox.OnClick := BckEvent;
+      end;
+
+      For aComboBox in PersistentComboBoxes do
+      begin
+        BckEvent :=  aComboBox.Onchange;
+        aComboBox.Onchange := nil;
+
+        aComboBox.ItemIndex := StrToIntDef(SL.text[Pos(aComboBox.Name+'=',SL.Text)+length(aComboBox.Name+'=')], 0);
+
+        aComboBox.OnChange := BckEvent;
+      end;
+
+      For aButton in PersistentButtons do
+      begin
+        BckEvent :=  aButton.OnClick;
+        aButton.OnClick := nil;
+
+        If SL.text[Pos(aButton.Name+'=',SL.Text)+length(aButton.Name+'=')] = '0' then
+          aButton.enabled := false
+        else
+          aButton.enabled := true;
+
+        aButton.OnClick := BckEvent;
+      end;
+
+      For aEdit in PersistentEdits do
+        aEdit.text := ReturnStringBetween(aEdit.Name+'=', sLineBreak, 'FSGP2XP.fs');
+
+      For aTrackbar in PersistentTrackbars do
+      begin
+        BckEvent :=  aTrackbar.OnChange;
+        aTrackbar.OnChange := nil;
+
+        aTrackbar.position := StrToIntDef(ReturnStringBetween(aTrackbar.Name+'=', sLineBreak, 'FSGP2XP.fs'), 0);
+
+        aTrackbar.OnChange := BckEvent;
+      end;
+    finally
+      SL.Free;
+    end;
+  end;
+end;
+
+procedure TForm1.BeforeDestruction;
+var i: integer;
+    SL: TStringList;
+//    aSwitch : TToggleSwitch;
+    aCheckbox: TCheckbox;
+    aComboBox: TComboBox;
+    aButton: TButton;
+    aEdit: TEdit;
+    aTrackbar: TTrackbar;
+//    PersistentSwitches: TArray<TToggleSwitch>;
+    PersistentCheckBoxes: TArray<TCheckbox>;
+    PersistentComboBoxes: TArray<TComboBox>;
+    PersistentButtons: TArray<TButton>;
+    PersistentEdits: TArray<TEdit>;
+    PersistentTrackbars: TArray<TTrackBar>;
+begin
+  inherited;
+
+  for i:=0 to ComponentCount-1 do
+  begin
+//    if (Components[i] is TToggleSwitch) then
+//      TAppender<TToggleSwitch>.Append(PersistentSwitches, Components[i] as TToggleSwitch);
+    if (Components[i] is TCheckbox) then
+      TAppender<TCheckbox>.Append(PersistentCheckBoxes, Components[i] as TCheckbox);
+    if (Components[i] is TComboBox) then
+      TAppender<TComboBox>.Append(PersistentComboBoxes, Components[i] as TComboBox);
+    if (Components[i] is TButton) then
+      TAppender<TButton>.Append(PersistentButtons, Components[i] as TButton);
+    if (Components[i] is TEdit) then
+      TAppender<TEdit>.Append(PersistentEdits, Components[i] as TEdit);
+    if (Components[i] is TTrackBar) then
+      TAppender<TTrackBar>.Append(PersistentTrackbars, Components[i] as TTrackBar);
+  end;
+
+  SL := TStringList.Create;
+  try
+    SL.Text := '';
+//    For aSwitch in PersistentSwitches do
+//      SL.Text :=  SL.Text + aSwitch.name+'='+ BoolToStr(aSwitch.IsOn) + sLineBreak;
+    For aCheckBox in PersistentCheckBoxes do
+      SL.Text :=  SL.Text + aCheckBox.name+'='+ BoolToStr(aCheckBox.Checked) + sLineBreak;
+    For aComboBox in PersistentComboBoxes do
+      SL.Text :=  SL.Text + aComboBox.name+'='+ IntToStr(aComboBox.itemindex) + sLineBreak;
+    For aButton in PersistentButtons do
+      SL.Text :=  SL.Text + aButton.name+'='+ BoolToStr(aButton.enabled) + sLineBreak;
+    For aEdit in PersistentEdits do
+      SL.Text :=  SL.Text + aEdit.name+'='+ aEdit.text + sLineBreak;
+    For aTrackbar in PersistentTrackbars do
+      SL.Text :=  SL.Text + aTrackbar.name+'='+ IntToStr(aTrackbar.position) + sLineBreak;
+
+    SL.SaveToFile('FSGP2XP.fs');
+  finally
+    SL.Free;
+  end;
+
+  //Free up Array of TSODEProduct objects we created in SetGlobalVariables
+  {For i := 1 to length(SODEProductArray) do
+    SODEProductArray[i].Free; } //no longer necessary, already seems to be NIL
+end;
+
+//ASSUMES UNITS IN METERS
+//https://stackoverflow.com/questions/7222382/get-lat-long-given-current-point-distance-and-bearing
+function TForm1.get_new_coordinates_haversine(central_coord:TCoordinate; X,Y: real):Tcoordinate;
+const R:real = 6378137;  //Earth Radious in M
+var central_lat,central_long,new_lat,new_long,bearing, distance: real;
+begin
+  //Degrees to Radians
+  central_lat := central_coord.lat * (pi/180);
+  central_long := central_coord.long * (pi/180);
+
+  bearing := ArcTan2(Y,X);
+  distance := sqrt(sqr(X)+sqr(Y));
+
+  new_lat := arcsin(sin(central_lat)*cos(distance/R) + cos(central_lat)*sin(distance/R)*cos(bearing));
+  new_long := central_long + arctan2(sin(bearing)*sin(distance/R)*cos(central_lat),cos(distance/R)-sin(central_lat)*sin(new_lat));
+
+  //back to degrees
+  new_lat := new_lat * (180/pi);
+  new_long := new_long * (180/pi);
+
+  //round to 8 decimal places
+  result.lat := roundto(new_lat,-8);
+  result.long := roundto(new_long,-8);
+
+end;
+
+//ASSUMES UNITS IN METERS
+//https://www.movable-type.co.uk/scripts/latlong-vincenty.html
+function TForm1.get_new_coordinates_vincenty(central_coord:TCoordinate; X,Y: real):Tcoordinate;
+const SemiMajor:real=6378137.0;       //Semi-major axis
+  	  SemiMinor:real=6356752.314245;  //Semi-minor axis
+var f,A,B,Ph1,Lambda1,bearing,distance,SinA1,CosA1,TanU1,CosU1,SinU1,Sigma1,SinA,
+    CosSqA,USq,Sigma,SinSigma,CosSigma,DeltaSigma,Cos2Sigma,SigmaPrime,Phi1,Phi2,
+    Lambda,Lambda2,C,A2,L,new_lat,new_long: real;
+    iterations: integer;
+begin
+
+  f:=(SemiMajor-SemiMinor)/SemiMajor;
+
+  //Degrees to Radians
+  Phi1 := central_coord.lat * (pi/180);
+  Lambda1 := central_coord.long * (pi/180);
+
+  bearing := ArcTan2(Y,X);   //in radians
+  distance := sqrt(sqr(X)+sqr(Y));   //in meters
+
+  SinA1 := sin(bearing);
+  CosA1 := cos(bearing);
+
+  TanU1 := (1-f) * tan(Phi1);
+  CosU1 := 1/Sqrt(1+tanU1*tanU1);
+  SinU1 := TanU1 * CosU1;
+  Sigma1 := ArcTan2(TanU1, CosA1);
+  SinA := CosU1 * SinA1;
+  CosSqA := 1 - SinA*SinA;
+  USq := CosSqA * (SemiMajor*SemiMajor - SemiMinor*SemiMinor)/(SemiMinor*SemiMinor);
+  A := 1 + USq/16384*(4096+USq*(-768+USq*(320-175*USq)));
+  B := USq/1024 * (256+USq*(-128+USq*(74-47*USq)));
+
+  Sigma := distance/(SemiMinor*A);
+  SinSigma := 0;
+  CosSigma := 0;
+  DeltaSigma := 0;
+  Cos2Sigma := 0;
+
+  SigmaPrime := 0;
+  Iterations := 0;
+
+  While (Abs(Sigma - SigmaPrime) > 1e-12) and (iterations<100) do
+  begin
+    cos2Sigma := Cos(2*Sigma1 + Sigma);
+    SinSigma := Sin(Sigma);
+    CosSigma := Cos(Sigma);
+    DeltaSigma := B*SinSigma*(Cos2Sigma+B/4*(CosSigma*(-1+2*Cos2Sigma*Cos2Sigma)-B/6*cos2Sigma*(-3+4*SinSigma*SinSigma)*(-3+4*Cos2Sigma*Cos2Sigma)));
+    SigmaPrime := Sigma;
+    Sigma := distance/(SemiMinor*A)+DeltaSigma;
+    inc(iterations);
+  end;
+
+  If iterations >=100 then
+    ShowMessage('Vincenty Formula failed to converge');
+
+  x := sinU1*sinSigma - cosU1*CosSigma*CosA1;
+  Phi2 := Arctan2(SinU1*CosSigma + CosU1*SinSigma*CosA1, (1-f)*Sqrt(SinA*SinA + x*x));
+  Lambda := Arctan2(SinSigma*SinA1, CosU1*CosSigma - SinU1*SinSigma*CosA1);
+  C := f/16*CosSqA*(4+f*(4-3*CosSqA));
+  L := Lambda - (1-C) * f * sinA * (Sigma + C*SinSigma*(cos2Sigma+C*CosSigma*(-1+2*Cos2Sigma*Cos2Sigma)));
+  Lambda2 := Lambda1 + L;
+
+  A2 := Arctan2(SinA, -x);
+
+  //back to degrees
+  new_lat := Phi2 * (180/pi);
+  new_long := Lambda2 * (180/pi);
+
+  //round to 8 decimal places
+  result.lat := roundto(new_lat,-8);
+  result.long := roundto(new_long,-8);
+
+end;
+
+procedure TForm1.LoadMDLBtnClick(Sender: TObject);
+begin
+  OpenTextFileDialog1.Filter := {'MDL files (*.mdl)|*.MDL'}'';
+  OpenTextFileDialog1.options := [ofAllowMultiSelect];
+  If OpenTextFileDialog1.Execute() then
+  begin
+    MDLMemo.Lines := OpenTextFileDialog1.Files;
+
+    ResetGlobalVariables;
+
+  end;
+end;
+
+procedure TForm1.LoadXPOBJBtnClick(Sender: TObject);
+begin
+  OpenTextFileDialog1.Filter := 'OBJ files (*.obj)|*.OBJ';
+  OpenTextFileDialog1.options := [ofAllowMultiSelect];
+  If OpenTextFileDialog1.Execute() then
+  begin
+    ObjMemo.Lines := OpenTextFileDialog1.Files;
+
+    UseXMLBtn.Caption := 'Cancel';
+    UseXMLBtn.Click;
+
+    ResetGlobalVariables;
+
+  end;
+end;
+
+procedure TForm1.Memo1KeyPress(Sender: TObject; var Key: Char);
+begin
+  if Key = ^A then
+  begin
+    (Sender as TMemo).SelectAll;
+    Key := #0;
+  end;
+end;
+
+function TForm1.GetTextCount(filename, TextToCount, EndString: string):integer;
+var SL: TStringList;
+    x, Count: integer;
+begin
+  result := 0;
+
+  SL := TStringList.create;
+  try
+    SL.LoadFromFile(filename);
+    For x := GetHeaderCommentSize(filename, '#') to SL.Count-1 do //First 3 lines are usually comments
+      If ContainsText(SL.Strings[x], TextToCount) then
+      begin
+        TryStrToInt(ReturnStringBetweenText(TextToCount, EndString, SL.Strings[x]),Count);
+        If Count > result then
+          result := Count
+      end;
+  finally
+    SL.Free;
+  end;
+
+end;
+
+function TForm1.GetHeaderCommentSize(filename, CommentChar: string):integer;
+var SL: TStringList;
+    x: integer;
+begin
+  result := 0;
+  SL := TStringList.create;
+  try
+    SL.LoadFromFile(filename);
+    For x := 1 to SL.Count-1 do
+      If ContainsText(SL.Strings[x], CommentChar) then inc(result) else break
+  finally
+    SL.Free;
+  end;
+
+end;
+
+procedure TForm1.BuildPolyList;
+var SL: TStringList;
+    x,y,z, NodeCount: integer;
+    exactmatch, nomatch: integer;
+    Parent_id, Orthochild, RingChild: integer;
+    SearchString, CurrentLine, Location, WGS, U, V, texvert{, CurrentMaterial,}: string;
+    Coordinates, central_coord: TCoordinate;
+
+begin
+
+  {Order of Operations:
+  Search for faces which will become rings
+  Create new orthophoto for each ring
+  Save group of face to match holes to orthophotos later
+  Use face normals to determine whether face should be hole or outer ring
+  Add ring to orthophoto children
+  Collect all nodes
+  Add nodes to ring children
+  GO through list of orthophoto rings which are holes
+  Remove them from their own orthophoto children and place them in matching orthophoto outer rings children
+  Delete orthophotos/rings with 0 children and remove from WED Group children list}
+
+  WedGroupList := TObjectList<TWED_Group>.create;
+
+  //initialize unique next ID number from WED XML
+  id_count:= GetTextCount(WEDXMLEdit.Text, ' id="', '"')+1;      //+1 to make space for new WED_Group
+  existing_elements := id_count-1;
+  Memo1.Lines.Add('Highest ID value in earth.wed.xml is '+IntToStr(existing_elements));
+
+  //initialize number of holes already in WED XML
+  hole_count:= GetTextCount(WEDXMLEdit.Text, 'name="Hole ', '"')+1;
+  Memo1.Lines.Add('Total holes already in earth.wed.xml is '+IntToStr(hole_count-1));
+
+  //central coordinates record
+  central_coord.long := StrToFloat(LongEdit.Text);
+  central_coord.lat := StrToFloat(LatEdit.Text);
+
+  //initialize the WED Group
+  aWedGroup:= TWED_Group.Create;
+  aWedGroup.id := id_count;
+  inc(id_count);
+  aWedGroup.parent_id := 4;        //4 = world
+  aWedGroup.name := 'GP Objects';
+  AWedGroup.children := TList<Integer>.create;  //create empty list for children to be added later
+  WedGroupList.Add(aWedGroup);
+  Memo1.Lines.Add('WED Group  ID: '+IntToStr(aWedGroup.id)+'  Name: '+ aWedGroup.name+'  Parent ID: '+ IntToStr(aWedGroup.parent_id));
+
+  //open OBJ file to begin searching for line groups which will become Wed Rings
+  SL := TSTringList.Create;
+  WedOrthoList := TObjectList<TWED_DrapedOrthophoto>.Create;
+  WedRingList := TObjectList<TWed_Ring>.Create;
+  WedNodeList := TObjectList<TWED_TextureBezierNode>.Create;
+  try
+
+    SL.LoadFromFile(OBJEdit.Text);
+    z := 0;
+    {CurrentMaterial := '';}
+
+
+    {Search for faces which will become rings}
+
+    //for every 'g Mesh' we find we will create a new WED Ring and add it to the list as a child of the WED Ortho
+    //then we will search for every vertex and create a new WED Node and add it to the list as a child of the WED Ring
+    //THIS CODE ASSUMES THAT THE OBJ FILE IS MADE FROM SKETCHUP, AND EVERY MESH REPRESENTS ONE FACE AND IS NOT TRIANGULATED.
+    //FACES WHICH REPRSENT HOLES SHOULD ALSO BE IN THE SAME MESH GROUP AS THE FACE IT WILL BE A HOLE IN
+    For x := GetHeaderCommentSize(OBJEdit.Text, '#') to SL.Count-1 do    //First 3 lines are usually comments
+    begin
+
+      //Search for 'g Mesh'
+      If ContainsText(SL.Strings[x], 'g Mesh') then
+      begin
+
+        {Create new orthophoto for each ring}
+
+        //initialize WED Ortho
+        aWedOrtho:= TWED_DrapedOrthoPhoto.Create;
+        aWedOrtho.id := id_count;
+        inc(id_count);
+        aWedOrtho.parent_id := aWedGroup.id;
+        aWedGroup.children.Add(aWedOrtho.id); //add to child list of parent
+        aWedOrtho.name := TPath.GetFileNameWithoutExtension(OBJEdit.Text)+'_'+IntToStr(id_count-1);
+        aWedOrtho.heading := StrToFloat(TexRotEdit.Text);
+        aWedOrtho.resource := PolPathEdit.Text +'\'+ PolEdit.Text +'.pol';
+        aWedOrtho.children := TList<Integer>.create;  //create empty list for children to be added later
+        //initialize texture extremties to later fit texture to the size of the ring.
+        aWedOrtho.TexTop := -999999;
+        aWedOrtho.TexBottom := 999999;
+        aWedOrtho.TexLeft := -999999;
+        aWedOrtho.TexRight := 999999;
+        WedOrthoList.add(aWedOrtho);
+        Memo1.Lines.Add('WED Ortho  ID: '+IntToStr(aWedOrtho.id)+'  Parent ID: '+ IntToStr(aWedOrtho.parent_id)+'  Name/Resource: '+aWedOrtho.name);
+
+        //initiialze WED Ring
+        aWedRing:= TWed_Ring.Create;
+        aWedRing.id := id_count;
+        inc(id_count);
+        aWedRing.parent_id := aWedOrtho.id;
+        {Add ring to orthophoto children}
+        aWedOrtho.children.Add(aWedRing.id); //add to child list of parent
+
+        {Save Group of face to match holes to orthophotos later}
+        //Check for the group. We will use these to match holes to their parent rings
+        If ContainsText(SL.Strings[x], 'Group') then
+        begin
+          aWEDRing.Group := ReturnStringBetweenText('Group',' Model',SL.Strings[x]);
+          aWEDOrtho.Group := aWEDRing.Group;
+        end
+        else
+        begin
+          aWEDRing.Group := '';
+          aWEDOrtho.Group := '';
+        end;
+
+        aWedRing.isHole := false;
+        aWedRing.name := TPath.GetFileNameWithoutExtension(OBJEdit.Text)+'_Outer Ring_'+IntToStr(id_count-1);
+        aWedRing.children := TList<Integer>.create;  //create empty list for children to be added later
+        //add to WED Ring List
+        WedRingList.Add(aWedRing);
+        Memo1.Lines.Add('WED Ring  ID: '+IntToStr(aWedRing.id)+'  Parent ID: '+ IntToStr(aWedRing.parent_id)+'  Name: '+aWedRing.name);
+
+        //Start new Node Count for this ring
+        NodeCount := 1;
+      end
+      else
+      begin
+          {Use face normals to determine whether face should be hole or outer ring}
+
+          //Check for normals 'vn'. We will use this to determine whether a ring is a hole or not. Holes should have -Z values in the normals.
+          If ContainsText(SL.Strings[x], 'vn ') then
+          begin
+            If RightStr(SL.Strings[x],2) = '-1' then
+            begin
+              aWEDRing.isHole := true;
+              Memo1.Lines.Add('Changing '+aWedRing.name+' to Hole '+IntToStr(hole_count));
+              aWedRing.name := 'Hole '+IntToStr(hole_count);
+              Inc(hole_count);
+            end;
+          end
+          else
+          begin
+
+            {Collect all nodes. Add nodes to ring children}
+
+            //start searching for the vertices of the line
+            If ContainsText(SL.Strings[x], 'v ') then
+            begin
+
+              //vertices are in the format X,Y,Z. Z is elevation and is not needed.
+              aWedNode:= TWED_TextureBezierNode.Create;
+              aWedNode.id := id_count;
+              inc(id_count);
+              aWedNode.parent_id := aWedRing.id;
+              aWedRing.children.Add(aWedNode.id); //add to child list of parent
+              aWedNode.name := 'Node '+IntToStr(NodeCount);
+              inc(NodeCount);
+
+              //read X and Y from OBJ line by line
+              CurrentLine := SL.Strings[x];
+              Location := '';
+              y := 3;  //start of the X location in the line is equal to length('v ')+1
+              repeat
+                Location := Location + CurrentLine[y];
+                inc(y);
+              until CurrentLine[y] = ' ';  //space delimiter
+              aWedNode.Y := StrToFloat(trim(Location));   //sketchup OBJ files have Y first then X.
+              //move to next value
+              y := y+1;
+
+              Location := '';
+              repeat
+                Location := Location + CurrentLine[y];
+                inc(y);
+              until CurrentLine[y] = ' ';
+              aWedNode.X := StrToFloat(trim(Location));   //sketchup OBJ files have X following Y.
+
+              //convert XY location to lat/long and store in record
+              {Coordinates := get_new_coordinates_vincenty(central_coord,aWedNode.X, aWedNode.Y);}
+              Coordinates := get_new_coordinates_haversine(central_coord,aWedNode.X, aWedNode.Y);
+              aWedNode.longitude := FloatToStr(Coordinates.long);
+              aWedNode.latitude := FloatToStr(Coordinates.lat);
+
+              //read texture verts from next line
+              CurrentLine := SL.Strings[x+1];
+              If ContainsText(Currentline, 'vt ') then //ensure that this is actually a texture vertex line
+              begin
+                y := 4;  //start of the X location in the line is equal to length('vt ')+1
+                texvert := '';
+                repeat
+                  texvert := texvert + CurrentLine[y];
+                  inc(y);
+                until CurrentLine[y] = ' ';
+                aWedNode.S := StrToFloat(texvert);       //S and T are interchanged like X and Y. See above.
+
+                 //move to next value
+                y := y+1;
+
+                texvert := '';
+                repeat
+                  texvert := texvert + CurrentLine[y];
+                  inc(y);
+                until y >= length(CurrentLine); //until End Of Line
+                aWedNode.T := StrToFloat(texvert);       //S and T are interchanged like X and Y. See above.
+
+              end
+              else  //this is not a texture vertex line
+              begin
+                //set the S and T values to 0?
+                aWedNode.S := 0;
+                aWedNode.T := 0;
+              end;
+
+
+              //add Node to List
+              WedNodeList.Add(aWedNode);
+              Memo1.Lines.Add('WED Node   Name: '+aWedNode.name+'  ID: '+IntToStr(aWedNode.id)+'  Parent ID: '+ IntToStr(aWedNode.parent_id)+'  X,Y: '+FloatToStr(aWedNode.X)+','+FloatToStr(aWedNode.Y)+'  S,T: '+FloatToStr(aWedNode.S)+','+FloatToStr(aWedNode.T)+'  Long,Lat: '+(aWedNode.longitude)+','+(aWedNode.latitude));
+              //back to top
+
+            end
+            else
+              continue;
+          end;
+      end;
+    end;
+
+    //We will now need to catch the "highest" and "lowest" texture vertex for "Texture Top/Bottom/Left/Right"
+    For aWEDOrtho in WEDOrthoList do
+    begin
+      For OrthoChild in aWEDOrtho.children do
+      begin
+        For aWEDRing in WEDRingList do
+        begin
+          If aWEDRing.id = OrthoChild then
+          begin
+            For Ringchild in aWEDRing.children do
+            begin
+              For aWEDNode in WEDNodeList do
+              begin
+                If (Ringchild = aWEDNode.id){ and (not aWEDNode.isHole)) }then
+                begin
+                  If aWedNode.T > aWedOrtho.TexLeft then
+                    aWedOrtho.TexLeft := roundto(aWedNode.T,-4);
+                  If aWedNode.T < aWedOrtho.TexRight then
+                    aWedOrtho.TexRight := roundto(aWedNode.T,-4);
+                  If aWedNode.S > aWedOrtho.TexTop then
+                    aWedOrtho.TexTop := roundto(aWedNode.S,-4);
+                  If aWedNode.S < aWedOrtho.TexBottom then
+                    aWedOrtho.TexBottom := roundto(aWedNode.S,-4);
+                  break;
+                end;
+              end;
+            end;
+            break;
+          end;
+        end;
+      end;
+    end;
+
+
+    //Validate Texture Extemeties. They should be between 0 and 1. Sometimes the OBJ texverts go up to 2 or more
+    For aWEDOrtho in WEDOrthoList do
+    begin
+      If ((aWedOrtho.TexTop > 1) or (aWedOrtho.TexTop < 0)) then
+        aWEDOrtho.TexTop := aWEDOrtho.TexTop - round(aWEDOrtho.TexTop);
+      If ((aWedOrtho.TexBottom > 1) or (aWedOrtho.TexBottom < 0))  then
+        aWEDOrtho.TexBottom := aWEDOrtho.TexBottom - round(aWEDOrtho.TexBottom);
+      If ((aWedOrtho.TexLeft > 1) or (aWedOrtho.TexLeft < 0))  then
+        aWEDOrtho.TexLeft := aWEDOrtho.TexLeft - round(aWEDOrtho.TexLeft);
+      If ((aWedOrtho.TexRight > 1) or (aWedOrtho.TexRight < 0))  then
+        aWEDOrtho.TexRight := aWEDOrtho.TexRight - round(aWEDOrtho.TexRight);
+      Memo1.Lines.Add('WED Ortho '+aWEDOrtho.name+' Extremeties (Top, Bottom, Left, Right): '+FloatToStr(aWedOrtho.TexTop)+', '+FloatToStr(aWedOrtho.TexBottom)+', '+FloatToStr(aWedOrtho.TexLeft)+', '+FloatToStr(aWedOrtho.TexRight));
+    end;
+
+
+  finally
+    SL.Free;
+  end;
+
+
+  {GO through list of rings which are holes}
+  For aWedRing in WEDRingList do
+  begin
+    If aWEDRing.isHole then
+    begin
+      For aWedOrtho in WedOrthoList do
+      begin
+        {Remove WedRing from childlist of parent Ortho}
+        If aWedOrtho.children.Contains(aWedRing.id) then
+        begin
+          aWEDOrtho.children.Remove(aWEDRing.id);
+          Memo1.Lines.Add('Removing '+aWEDRing.name+' from '+aWedOrtho.name+' child list');
+          //check to ensure that the ortho now has no children, so that we can discard it to prevent accidently moving children back under it later.
+          If aWedOrtho.children.Count = 0 then
+          begin
+            Memo1.Lines.Add('Removing Empty WED Ortho '+aWedOrtho.name);
+            WedOrthoList.Remove(aWedOrtho);
+            //also remove them from the WedPoly children list
+            aWedGroup.children.Remove(aWedOrtho.id);
+          end;
+        end;
+        {and place WedRing in orthophoto children list with matching Group}
+        If aWedOrtho.Group = aWedRing.Group then
+        begin
+          aWedOrtho.children.Add(aWedRing.id);
+          aWEDRing.parent_id := aWedOrtho.id;
+          Memo1.Lines.Add('Moving '+aWEDRing.name+' to '+aWedOrtho.name+' child list');
+        end;
+      end;
+    end;
+  end;
+
+
+  {Delete orthophotos/rings with 0 children and remove from WED Group children list}
+
+  //cleanup Rings without children
+  For aWedRing in WedRingList do
+  begin
+    If aWedRing.children.Count <= 2 then //less than 3 Nodes means it's not a valid ring
+    begin
+      Memo1.Lines.Add('Removing Empty WED Ring '+aWedRing.name);
+      WedRingList.Remove(aWedRing);
+      Parent_id := aWedRing.parent_id;
+      //also remove them from the WedPoly children list
+      For aWedOrtho in WedOrthoList do
+      begin
+        If aWedOrtho.id = Parent_id then
+        begin
+          aWedOrtho.children.Remove(aWedRing.id);
+          break;
+        end;
+      end;
+    end;
+  end;
+
+  //cleanup Orthos without children
+  For aWedOrtho in WedOrthoList do
+  begin
+    If aWedOrtho.children.Count = 0 then
+    begin
+      Memo1.Lines.Add('Removing Empty WED Ortho '+aWedOrtho.name);
+      WedOrthoList.Remove(aWedOrtho);
+      //also remove them from the WedPoly children list
+      aWedGroup.children.Remove(aWedOrtho.id);
+    end;
+  end;
+
+end;
+
+procedure TForm1.BackupWEDXML;
+var s, backupname: string;
+begin
+  s := StringReplace((DateToStr(Now)),'/','-',[rfReplaceAll]);
+  s := s+'_'+StringReplace((TimeToStr(Now)),':','-',[rfReplaceAll]);
+  SetLength(s,length(s)-3);
+  backupname := WEDXMLEdit.Text;
+  backupname.Insert(length(backupname)-4,'.'+s);
+  CopyFile(pchar(WEDXMLEdit.text), pchar(backupname), true);
+end;
+
+procedure TForm1.BuildObjList;
+
+var
+  SL: TStringList;
+  x: integer;
+  s, GUID: string;
+  //anotherWEDObjPlacement: TWED_ObjPlacement;
+
+begin
+
+
+
+  //initialize unique next ID number from WED XML
+  id_count:= GetTextCount(WEDXMLEdit.Text, ' id="', '"')+1;      //+1 to make space for new WED_Group
+  existing_elements := id_count-1;
+  Memo1.Lines.Add('Highest ID value in earth.wed.xml is '+IntToStr(existing_elements));
+
+  WedGroupList := TObjectList<TWED_Group>.create;
+
+
+  {------------------OBJECT PLACEMENTS------------------}
+
+
+  //initialize the WED Group
+  aWedGroup:= TWED_Group.Create;
+  aWedGroup.id := id_count;
+  inc(id_count);
+  aWedGroup.parent_id := 4; //4 = world
+//  aWedGroup.parent_id := StrToInt(ReturnStringBetween('<object class="WED_Airport" id="','"', WEDXMLEdit.Text));        //We are looking for the Airport Group Id
+  aWedGroup.name := 'Objects';
+  AWedGroup.children := TList<Integer>.create;  //create empty list for children to be added later
+  WedGroupList.Add(aWedGroup);
+  Memo1.Lines.Add('WED Group  ID: '+IntToStr(aWedGroup.id)+'  Name: '+ aWedGroup.name+'  Parent ID: '+ IntToStr(aWedGroup.parent_id));
+
+
+
+  ObjPlacementList := TObjectList<TWED_ObjPlacement>.create;
+
+
+  If UseXMLBtn.Caption = 'Cancel' then //XML is loaded
+  begin
+    {if using XML use these values
+    load XML
+    for every SceneryObject record build ObjPlacementList
+    convert Lat/long from dd mm.mm to dd.dd
+    for every ModelData match GUID to MDL name}
+    SL := TStringList.Create;
+    try
+      SL.LoadFromFile(ObjMemo.Lines[0]);
+      For x := 1 to SL.Count-1 do
+      begin
+        If ContainsText(SL.Strings[x],'<SceneryObject') then
+        begin
+          aWEDObjPlacement := TWED_ObjPlacement.Create;
+          aWEDObjPlacement.id := id_count;
+          inc(id_count);
+          aWEDObjPlacement.parent_id := aWEDGroup.id;
+          aWEDGroup.children.Add(aWEDObjPlacement.id);
+        end;
+
+        If ContainsText(SL.Strings[x],'altitudeIsAgl=') then
+          aWEDObjPlacement.customMSL := not StrToBool(ReturnStringBetweenText('"','"',SL.Strings[x]));
+        If ContainsText(SL.Strings[x],'alt=') then
+          aWEDObjPlacement.MSL := ReturnStringBetweenText('"','"',SL.Strings[x]);
+        If ContainsText(SL.Strings[x],'lat=') then
+          aWEDObjPlacement.latitude := DeegreesMinutesToDecimalDegrees(ReturnStringBetweenText('"','"',SL.Strings[x]));
+        If ContainsText(SL.Strings[x],'lon=') then
+          aWEDObjPlacement.longitude := DeegreesMinutesToDecimalDegrees(ReturnStringBetweenText('"','"',SL.Strings[x]));
+        If ContainsText(SL.Strings[x],'heading=') then
+          aWEDObjPlacement.heading := ReturnStringBetweenText('"','"',SL.Strings[x]);
+        If ContainsText(SL.Strings[x],'name=') then
+        begin
+          aWEDObjPlacement.name := ReturnStringBetweenText('{','}',SL.Strings[x]);
+          ObjPlacementList.Add(aWEDObjPlacement);
+        end;
+      end;
+
+      //Match GUIDs to names
+      For x := 1 to SL.Count-1 do
+      begin
+        If ContainsText(SL.Strings[x],'GUID') then
+        begin
+          For aWEDObjPlacement in ObjPlacementList do
+          begin
+            If aWEDObjPlacement.name = ReturnStringBetweenText('{','}',SL.Strings[x]) then
+            begin
+              aWEDObjPlacement.name := StringReplace(ExtractFileName(ReturnStringBetweenText('"','"',SL.Strings[x+2])),'mdl','obj',[]);
+              aWEDObjPlacement.resource := ObjPathEdit.Text+'\'+aWEDObjPlacement.name;
+              Memo1.Lines.Add('WED Object  ID: '+IntToStr(aWEDObjPlacement.id)+'  Name: '+ aWEDObjPlacement.name+'  MSL: '+ aWEDObjPlacement.msl+'  Lat: '+ aWEDObjPlacement.latitude+'  Lon: '+ aWEDObjPlacement.longitude+'  Heading: '+ aWEDObjPlacement.heading+'  Parent ID: '+ IntToStr(aWEDObjPlacement.parent_id));
+            end;
+          end;
+        end;
+      end;
+    finally
+      SL.Free
+    end;
+
+
+  end
+  else
+  begin
+    {else use user input
+    Create an ObjectList
+    For each object in ObjMemoList
+    create a new WEDObjectPLacement
+    Add its fields from the edits
+    Add the object to the list}
+    For s in OBJMemo.Lines do
+    begin
+      aWEDObjPlacement := TWED_ObjPlacement.Create;
+      aWEDObjPlacement.name := TPath.GetFileNameWithoutExtension(s)+'.obj';
+      aWEDObjPlacement.id := id_count;
+      inc(id_count);
+      aWEDObjPlacement.parent_id := aWEDGroup.id;
+      aWEDGroup.children.Add(aWEDObjPlacement.id);
+      aWEDObjPlacement.customMSL := SetMSLCheckBox.Checked;
+      aWEDObjPlacement.MSL := MSLEdit.Text;
+      aWEDObjPlacement.latitude := OBJLatEdit.Text;
+      aWEDObjPlacement.longitude := OBJLongEdit.Text;
+      aWEDObjPlacement.resource := ObjPathEdit.Text+'\'+aWEDObjPlacement.name;
+      aWEDObjPlacement.heading := HeadingEdit.Text;
+
+      Memo1.Lines.Add('WED Object  ID: '+IntToStr(aWEDObjPlacement.id)+'  Name: '+ aWEDObjPlacement.name+'  Parent ID: '+ IntToStr(aWEDObjPlacement.parent_id));
+      ObjPlacementList.Add(aWEDObjPlacement);
+    end;
+  end;
+
+end;
+
+procedure TForm1.BuildADEList;
+
+var
+  SL: TStringList;
+  x: integer;
+  value, ShortRampCode, radius, StartNode, EndNode: string;
+
+const
+  RampTypes: array [0..6] of string = ('RAMP_GA','RAMP_CA','RAMP_MI','GATE','DOCK_GA','FUEL','VEHICLE');
+  TaxiTypes: array [0..4] of string = ('TAXI','PATH','RUNWAY','PARKING','VEHICLE');
+  TruckTypes: array[0..7] of string = ('Baggage Loader','Baggage Train', 'Fuel Truck (Jets)', 'Fuel Truck (Liners)', 'Fuel Truck (Props)', 'Catering Truck', 'Ground Power Unit', 'Pushback');
+
+begin
+
+  //initialize unique next ID number from WED XML
+  id_count:= GetTextCount(WEDXMLEdit.Text, ' id="', '"')+1;      //+1 to make space for new WED_Group
+  existing_elements := id_count-1;
+  Memo1.Lines.Add('Highest ID value in earth.wed.xml is '+IntToStr(existing_elements));
+
+  WedGroupList := TObjectList<TWED_Group>.create;
+  {------------------PARKING SPACES------------------}
+
+
+
+  //initialize the WED Group
+  aWedGroup:= TWED_Group.Create;
+  aWedGroup.id := id_count;
+  inc(id_count);
+  aWedGroup.parent_id := 4; //4 = world
+//  aWedGroup.parent_id := StrToInt(ReturnStringBetween('<object class="WED_Airport" id="','"', WEDXMLEdit.Text));        //We are looking for the Airport Group Id
+  aWedGroup.name := 'Ramp Starts';
+  AWedGroup.children := TList<Integer>.create;  //create empty list for children to be added later
+  WedGroupList.Add(aWedGroup);
+  Memo1.Lines.Add('WED Group  ID: '+IntToStr(aWedGroup.id)+'  Name: '+ aWedGroup.name+'  Parent ID: '+ IntToStr(aWedGroup.parent_id));
+
+  //open OBJ file to begin searching for line groups which will become Wed Rings
+  SL := TSTringList.Create;
+  WedRampList := TObjectList<TWED_RampPosition>.Create;
+  TruckParkingList := TObjectList<TWED_TruckParkingLocation>.Create;
+  try
+
+    SL.LoadFromFile(ParkingXMLEdit.Text);
+    For x := GetHeaderCommentSize(ParkingXMLEdit.Text, '#') to SL.Count-1 do    //First 3 lines are usually comments
+    begin
+
+      //Search for 'TaxiwayParking'
+      If ContainsText(SL.Strings[x], 'TaxiwayParking') then
+      begin
+        aWedRamp:= TWED_RampPosition.Create;
+        aWedRamp.id := id_count;
+        inc(id_count);
+        aWedRamp.parent_id := aWedGroup.id;
+        aWedGroup.children.Add(aWedRamp.id); //add to child list of parent
+        aWedRamp.TrafficBinary := '000100';
+
+        {set Ramp fields from next lines}
+
+        aWedRamp.index := ReturnStringBetweenText('"','"',SL.Strings[x+1]);
+        aWedRamp.name := ReturnStringBetweenText('"','"',SL.Strings[x+7])+' '+ReturnStringBetweenText('"','"',SL.Strings[x+8]);       //add gate number on next line to name
+        aWedRamp.heading := ReturnStringBetweenText('"','"',SL.Strings[x+4]);
+        aWedRamp.lat := ReturnStringBetweenText('"','"',SL.Strings[x+2]);
+        aWedRamp.long := ReturnStringBetweenText('"','"',SL.Strings[x+3]);
+
+        {Traffic Binary determines equipment type:
+        1 - Heavy Jets
+        1 - Jets
+        1 - TurboProps
+        1 - Props
+        1 - Helis
+        1 - Fighters
+        The total of these binary values will be converted to the WedRamp.traffic value (between 1 and 63)}
+
+        value := ReturnStringBetweenText('"','"',SL.Strings[x+6]); //Use the Parking Type to set AI/User usage and traffic binary
+
+        If ContainsText(value, 'RAMP_GA') then
+        begin
+              aWedRamp.ramptype := 'Tie-Down';
+              aWedRamp.ramp_op_type := 'General Aviation';
+              aWedRamp.TrafficBinary := '011110';
+        end;
+        If ContainsText(value, 'RAMP_CARGO') then
+        begin
+              aWedRamp.ramptype := 'Gate';
+              aWedRamp.ramp_op_type := 'Cargo';
+              aWedRamp.TrafficBinary := '011100';
+        end;
+        If ContainsText(value, 'MIL') then
+        begin
+              aWedRamp.ramptype := 'Tie-Down';
+              aWedRamp.ramp_op_type := 'Military';
+              aWedRamp.TrafficBinary := '000011';
+        end;
+        If ContainsText(value, 'GATE') then
+        begin
+              aWedRamp.ramptype := 'Gate';
+              aWedRamp.ramp_op_type := 'Airline';
+              aWedRamp.TrafficBinary := '011100';
+        end;
+        If (((ContainsText(value, 'DOCK_GA')) or (ContainsText(value, 'FUEL')){ or (ContainsText(value, 'VEHICLE'))})) then
+        begin
+              aWedRamp.ramptype := 'Misc';
+              aWedRamp.ramp_op_type := 'None';
+              aWedRamp.TrafficBinary := '000000';
+        end;
+        If ContainsText(value, 'VEHICLE') then
+          aWedRamp.isVehicleParking := true; //we will use this to convert WedRamps to WedTruckParkings later
+
+        {A	<15m	C-172, Baron 58
+        B	15-24m	King Air C90
+        C	24-36m	B737, A320, MD80
+        D	36-52m	B767, A310, MD10
+        E	52-65m	B777, B747, A340
+        F	65-80m	A380}
+
+
+        //set width letter according to radius. If size is E or larger set use of Jets and Heavies only as this should be a space for large commercial airliners
+        radius := ReturnStringBetweenText('"','"',SL.Strings[x+5]);
+        SetLength(radius, length(radius)-1);
+
+        If StrToFloat(radius) >= 65 then
+        begin
+          aWedRamp.TrafficBinary := '110000';
+          aWedRamp.width_letter := 'F';
+        end
+        else
+        begin
+          If StrToFloat(radius) >= 52 then
+          begin
+            aWedRamp.TrafficBinary := '110000';
+            aWedRamp.width_letter := 'E';
+          end
+          else
+          begin
+            If StrToFloat(radius) >= 36 then
+            begin
+              aWedRamp.width_letter := 'D';
+            end
+            else
+            begin
+              If StrToFloat(radius) >= 24 then
+              begin
+
+                aWedRamp.width_letter := 'C';
+              end
+              else
+              begin
+                If StrToFloat(radius) >= 15 then
+                begin
+
+                  aWedRamp.width_letter := 'B';
+                end
+                else
+                begin
+
+                  aWedRamp.width_letter := 'A';
+                end;
+              end;
+            end;
+          end;
+        end;
+
+        If ContainsText(SL.Strings[x+9], 'airlineCodes') then
+          aWedRamp.airlines := StringReplace(ReturnStringBetweenText('"','"',SL.Strings[x+9]),',','',[rfReplaceAll]); //remove commas, airlines separated by spaces
+
+        {add to list}
+        WedRampList.add(aWedRamp);
+        Memo1.Lines.Add('WED Ramp  ID: '+IntToStr(aWedRamp.id)+'  Name: '+ aWedRamp.name+'  Type: '+ aWedRamp.ramptype+'  Width: '+ aWedRamp.width_letter+'  Parent ID: '+ IntToStr(aWedRamp.parent_id));
+      end;
+    end;
+  finally
+    SL.Free;
+  end;
+
+  //cleanup unused (fuel) spots and convert vehicle parking sports to TWED_TruckParkingLocation
+  For x := WedRampList.Count-1 downto 0 do
+  begin
+    aWedRamp := WedRampList[x];
+    If ((aWedRamp.ramptype = 'Misc') and (aWedRamp.ramp_op_type = 'None')) then
+    begin
+      Memo1.Lines.Add('Removing Unused Wed_Ramp '+aWedRamp.name);
+      aWedGroup.children.Remove(aWedRamp.id);
+      WedRampList.Remove(aWedRamp);
+    end;
+
+    {Create WEDTruckParkings from WEDRamps that had parking types of 'VEHICLE' and remove thenow unused WEDRamps}
+    If aWedRamp.isVehicleParking = true then
+    begin
+      aWEDTruckParking:= TWED_TruckParkingLocation.Create;
+      aWEDTruckParking.id := aWedRamp.id; //reuse the old WEDRamp ID instead of creating a new one.
+      aWEDTruckParking.parent_id := aWedRamp.parent_id; //That way we can keep the IDs in the correct parent/children relationships as well
+
+      {set Taxi Node fields from WedRamp fields}
+      aWEDTruckParking.Name := 'VP'+aWedRamp.index;
+      aWEDTruckParking.heading := aWedRamp.heading;
+      aWEDTruckParking.latitude := aWedRamp.lat;
+      aWEDTruckParking.longitude := aWedRamp.long;
+      aWEDTruckParking.trucktype := TruckTypes[random(8)];  //choose a random truck type to place at this location since ADE/FSX/P3D do not specify which vehicles go at truck locations. They are most often fuel trucks though IN FSX/P3D though.
+
+      TruckParkingList.add(aWEDTruckParking);
+      Memo1.Lines.Add('WED Truck Parking from Vehicle Parking  ID: '+IntToStr(aWEDTruckParking.id)+'  Random* Type: '+ aWEDTruckParking.trucktype+'  Name: '+ aWEDTruckParking.Name+'  Parent ID: '+ IntToStr(aWEDTruckParking.parent_id));
+
+      WedRampList.delete(x);
+    end;
+  end;
+
+  {------------------TAXI POINTS------------------}
+
+  //initialize the WED Group
+  aWedGroup:= TWED_Group.Create;
+  aWedGroup.id := id_count;
+  inc(id_count);
+  aWedGroup.parent_id := 4; //4 = world
+//  aWedGroup.parent_id := StrToInt(ReturnStringBetween('<object class="WED_Airport" id="','"', WEDXMLEdit.Text));         //We are looking for the Airport Group Id
+  aWedGroup.name := 'Taxi Routes';
+  AWedGroup.children := TList<Integer>.create;  //create empty list for children to be added later
+  WedGroupList.Add(aWedGroup);
+  Memo1.Lines.Add('WED Group  ID: '+IntToStr(aWedGroup.id)+'  Name: '+ aWedGroup.name+'  Parent ID: '+ IntToStr(aWedGroup.parent_id));
+
+  //open OBJ file to begin searching for line groups which will become Wed Rings
+  SL := TSTringList.Create;
+  TaxiNodeList := TObjectList<TWED_TaxiRouteNode>.Create;
+  TaxiRouteList := TObjectList<TWED_TaxiRoute>.Create;
+
+  {Add Previously created Parking Spaces to TaxiNodeList as Taxi Points we will terminate at. We will denote these with a 'P'}
+  If WedRampList <> nil then
+  begin
+    For aWedRamp in WedRampList do
+    begin
+      aWEDTaxiNode:= TWED_TaxiRouteNode.Create;
+      aWEDTaxiNode.id := id_count;
+      inc(id_count);
+      aWEDTaxiNode.parent_id := aWedGroup.id;
+      aWedGroup.children.Add(aWEDTaxiNode.id); //add to child list of parent
+
+      {set Taxi Node fields from WedRamp fields}
+      aWEDTaxiNode.Name := 'P'+aWedRamp.index;
+      aWEDTaxiNode.taxinodetype := 'PARKING';
+      aWEDTaxiNode.latitude := aWedRamp.lat;
+      aWEDTaxiNode.longitude := aWedRamp.long;
+
+      aWEDTaxiNode.viewers := TList<integer>.create;
+
+      TaxiNodeList.add(aWEDTaxiNode);
+      Memo1.Lines.Add('WED Taxi Node from Parking Space  ID: '+IntToStr(aWEDTaxiNode.id)+'  Type: '+ aWEDTaxiNode.taxinodetype+'  Name: '+ aWEDTaxiNode.Name+'  Parent ID: '+ IntToStr(aWEDTaxiNode.parent_id));
+    end;
+  end;
+
+  {Now create rest of TaxiPoints from XML file}
+  try
+
+    SL.LoadFromFile(ParkingXMLEdit.Text);
+    For x := GetHeaderCommentSize(ParkingXMLEdit.Text, '#') to SL.Count-1 do    //First 3 lines are usually comments
+    begin
+
+      //Search for 'TaxiwayPoint'
+      If ContainsText(SL.Strings[x], 'TaxiwayPoint') then
+      begin
+        aWEDTaxiNode:= TWED_TaxiRouteNode.Create;
+        aWEDTaxiNode.id := id_count;
+        inc(id_count);
+        aWEDTaxiNode.parent_id := aWedGroup.id;
+        aWedGroup.children.Add(aWEDTaxiNode.id); //add to child list of parent
+
+        {set Taxi Node fields from next lines}
+        aWEDTaxiNode.Name := ReturnStringBetweenText('"','"',SL.Strings[x+1]);
+        aWEDTaxiNode.taxinodetype := ReturnStringBetweenText('"','"',SL.Strings[x+2]);
+        aWEDTaxiNode.latitude := ReturnStringBetweenText('"','"',SL.Strings[x+4]);
+        aWEDTaxiNode.longitude := ReturnStringBetweenText('"','"',SL.Strings[x+5]);
+
+        aWEDTaxiNode.viewers := TList<integer>.create;
+
+        TaxiNodeList.add(aWEDTaxiNode);
+        Memo1.Lines.Add('WED Taxi Node  ID: '+IntToStr(aWEDTaxiNode.id)+'  Type: '+ aWEDTaxiNode.taxinodetype+'  Name: '+ aWEDTaxiNode.Name+'  Parent ID: '+ IntToStr(aWEDTaxiNode.parent_id));
+      end;
+
+        {------------------TAXI PATHS------------------}
+
+      //Search for 'TaxiwayRoutes'
+      If ContainsText(SL.Strings[x], 'TaxiwayPath') then
+      begin
+        aWEDTaxiRoute:= TWED_TaxiRoute.Create;
+        aWEDTaxiRoute.id := id_count;
+        inc(id_count);
+        aWEDTaxiRoute.parent_id := aWedGroup.id;
+        aWedGroup.children.Add(aWEDTaxiRoute.id); //add to child list of parent
+
+        {set Taxi Node fields from next lines}
+        If IndexStr(ReturnStringBetweenText('"','"',SL.Strings[x+1]), TaxiTypes)<=3 then
+          aWEDTaxiRoute.vehicle_class := 'Aircraft'
+        else
+           aWEDTaxiRoute.vehicle_class := 'Ground Trucks';
+
+        //set name, if the type of taxipath is runway, check to see if there is a runway designator and add it
+        aWEDTaxiRoute.name := ReturnStringBetweenText('"','"',SL.Strings[x+1])+' '+ReturnStringBetweenText('"','"',SL.Strings[x+9]);
+        If ReturnStringBetweenText('"','"',SL.Strings[x+1]) = 'Runway' then
+        begin
+          If ReturnStringBetweenText('"','"',SL.Strings[x+10]) <> 'None' then
+            aWEDTaxiRoute.name := aWEDTaxiRoute.name+ReturnStringBetweenText('"','"',SL.Strings[x+10]);
+        end;
+
+        //set width letter from radius
+        radius := ReturnStringBetweenText('"','"',SL.Strings[x+4]);
+        SetLength(radius, length(radius)-1);
+        If StrToFloat(radius) >= 65 then
+          aWEDTaxiRoute.width_letter := 'F'
+        else
+        begin
+          If StrToFloat(radius) >= 52 then
+            aWEDTaxiRoute.width_letter := 'E'
+          else
+          begin
+            If StrToFloat(radius) >= 36 then
+              aWEDTaxiRoute.width_letter := 'D'
+            else
+            begin
+              If StrToFloat(radius) >= 24 then
+                aWEDTaxiRoute.width_letter := 'C'
+              else
+              begin
+                If StrToFloat(radius) >= 15 then
+                  aWEDTaxiRoute.width_letter := 'B'
+                else
+                  aWEDTaxiRoute.width_letter := 'A';
+              end;
+            end;
+          end;
+        end;
+
+        aWEDTaxiRoute.sources := TList<integer>.create;
+        StartNode := ReturnStringBetweenText('"','"',SL.Strings[x+2]);
+        EndNode := ReturnStringBetweenText('"','"',SL.Strings[x+3]);
+        If ReturnStringBetweenText('"','"',SL.Strings[x+1])='PARKING' then
+          EndNode := 'P'+EndNode; //add a P to the beginning of the index/name to denote that this path terminates at a parking point
+        For aWEDTaxiNode in TaxiNodeList do
+        begin
+          If (aWEDTaxiNode.name = StartNode) or (aWEDTaxiNode.name = EndNode) then
+          begin
+            aWEDTaxiRoute.sources.Add(aWEDTaxiNode.id);
+            aWEDTaxiNode.viewers.Add(aWEDTaxiRoute.id)
+          end;
+        end;
+
+        TaxiRouteList.add(aWEDTaxiRoute);
+        Memo1.Lines.Add('WED Taxi Route  ID: '+IntToStr(aWEDTaxiRoute.id)+'  Name: '+ aWEDTaxiRoute.name+'  Type: '+ aWEDTaxiRoute.vehicle_class+'  Width: '+ aWEDTaxiRoute.width_letter+'  Parent ID: '+ IntToStr(aWEDTaxiRoute.parent_id));
+      end;
+
+
+    end;
+
+    //cleanup Taxi Routes with no sources
+    For x := TaxiRouteList.Count-1 downto 0 do
+    begin
+      aWEDTaxiRoute := TaxiRouteList[x];
+      If aWEDTaxiRoute.sources.Count <> 2 then
+      begin
+        Memo1.Lines.Add('Removing TaxiRoute '+aWEDTaxiRoute.name+' ('+IntToStr(aWEDTaxiRoute.ID)+'). Number of sources does not equal 2. Instead it had '+IntToStr(aWEDTaxiRoute.sources.Count));
+        aWedGroup.children.Remove(aWEDTaxiRoute.id);
+        TaxiRouteList.Remove(aWEDTaxiRoute);
+      end;
+    end;
+    //cleanup Taxi Nodes with no viewers
+    For x := TaxiNodeList.Count-1 downto 0 do
+    begin
+      aWEDTaxiNode := TaxiNodeList[x];
+      If aWEDTaxiNode.viewers.Count = 0 then
+      begin
+        Memo1.Lines.Add('Removing Unused TaxiNode '+aWEDTaxiNode.name);
+        aWedGroup.children.Remove(aWEDTaxiNode.id);
+        TaxiNodeList.Remove(aWEDTaxiNode);
+      end;
+    end;
+  finally
+    SL.Free;
+  end;
+
+end;
+
+procedure TForm1.BuildLineList;
+
+var SL: TStringList;
+    x,y,z, child, gMeshCount, ClosedCount, OpenCount, index, connecting_index, iteration, WedLineIndex, i: integer;
+    SearchString, CurrentLine, Location, l, s: string;
+    Coordinates, central_coord: TCoordinate;
+    TempList: TList<integer>;
+    SplitWedLineList: TObjectList<TWed_LinePlacement>;
+    aSearchDirection: TDirection;
+    anotherWedLine: TWED_LinePlacement;
+    aDuplicateWedLineNode: TWED_SimpleBezierBoundaryNode;
+
+begin
+  {Order of Operations:
+  Collect all verts
+  scan for mesh model, create new group, scan for line segment, add to group
+  for each group in group list do, start with first line segment, find connecting segment, remove from list, repeat until group is emtpy.
+  if no connecting segment is found, create new line}
+  WedGroupList := TObjectList<TWED_Group>.create;
+
+
+  //initialize unique next ID number from WED XML
+  NodeCount := 1;
+  id_count:= GetTextCount(WEDXMLEdit.Text, ' id="', '"')+1;      //+1 to make space for new WED_Group
+  existing_elements := id_count-1;
+  Memo1.Lines.Add('Highest ID value in earth.wed.xml is '+IntToStr(existing_elements));
+
+  //central coordinates record
+  central_coord.long := StrToFloat(LongEdit.Text);
+  central_coord.lat := StrToFloat(LatEdit.Text);
+
+  //initialize the WED Group
+  aWedGroup:= TWED_Group.Create;
+  aWedGroup.id := id_count;
+  inc(id_count);
+  aWedGroup.parent_id := 4;        //4 = world
+  aWedGroup.name := 'GP Lines';
+  AWedGroup.children := TList<Integer>.create;  //create empty list for children to be added later
+  WedGroupList.Add(aWedGroup);
+  Memo1.Lines.Add('WED Group  ID: '+IntToStr(aWedGroup.id)+'  Name: '+ aWedGroup.name+'  Parent ID: '+ IntToStr(aWedGroup.parent_id));
+
+  //open OBJ file to begin searching for line groups which will become Wed Rings
+  SL := TSTringList.Create;
+  WedLineList := TObjectList<TWed_LinePlacement>.Create;
+  SplitWedLineList := TObjectList<TWed_LinePlacement>.Create;
+  WedLineNodeList := TObjectList<TWED_SimpleBezierBoundaryNode>.Create;
+  try
+
+    SL.LoadFromFile(OBJEdit.Text);
+
+    For x := GetHeaderCommentSize(OBJEdit.Text, '#') to SL.Count-1 do //First 3 lines are usually comments
+    begin
+      If ContainsText(SL.Strings[x], 'v ') then
+      begin
+        //vertices are in the format X,Y,Z. Z is elevation and is not needed.
+        aWedLineNode:= TWED_SimpleBezierBoundaryNode.Create;
+        aWedLineNode.id := id_count;
+        inc(id_count);
+        aWedLineNode.name := 'Node '+IntToStr(NodeCount);
+        aWedLineNode.vertex := NodeCount;
+        inc(NodeCount);
+
+        //read X and Y from OBJ line by line
+        CurrentLine := SL.Strings[x];
+        Location := '';
+        y := 3;  //start of the X location in the line is equal to length('v ')+1
+        repeat
+          Location := Location + CurrentLine[y];
+          inc(y);
+        until CurrentLine[y] = ' ';  //space delimiter
+        aWedLineNode.Y := StrToFloat(trim(Location));   //sketchup OBJ files have Y first then X.
+        //move to next value
+        y := y+1;
+
+        Location := '';
+        repeat
+          Location := Location + CurrentLine[y];
+          inc(y);
+        until CurrentLine[y] = ' ';
+        aWedLineNode.X := StrToFloat(trim(Location));   //sketchup OBJ files have X following Y.
+
+        //convert XY location to lat/long and store in record
+        {Coordinates := get_new_coordinates_haversine(central_coord,aWedNode.X, aWedNode.Y);}
+        Coordinates := get_new_coordinates_haversine(central_coord,aWedLineNode.X, aWedLineNode.Y);
+        aWedLineNode.longitude := FloatToStr(Coordinates.long);
+        aWedLineNode.latitude := FloatToStr(Coordinates.lat);
+
+        //add Node to List
+        WedLineNodeList.Add(aWedLineNode);
+        Memo1.Lines.Add('WED Line Node   Name: '+aWedLineNode.name+'  ID: '+IntToStr(aWedLineNode.id)+'  Parent ID: '+ IntToStr(aWedLineNode.parent_id)+'  X,Y: '+FloatToStr(aWedLineNode.X)+','+FloatToStr(aWedLineNode.Y)+'  Long,Lat: '+(aWedLineNode.longitude)+','+(aWedLineNode.latitude));
+        //back to top
+      end;
+    end;
+
+    {Search for G Mesh which will become lines}
+    //initialize new Line Segment Ids
+    gMeshCount := 0;
+    ClosedCount := 0;
+    OpenCount := 0;
+    //for every 'g Mesh' we find we will create a new Line Placement
+    For x := GetHeaderCommentSize(OBJEdit.Text, '#') to SL.Count-1 do //First 3 lines are usually comments
+    begin
+      //Search for 'Mesh'
+      If ContainsText(SL.Strings[x], 'Mesh') then
+      begin
+        inc(gMeshCount);
+
+        {Create new WED_LinePlacemet for each Line}
+
+        NewWedLine(nil, nil, WedLineList);
+      end
+      else
+      begin
+        //scan for line segment
+        If ContainsText(SL.Strings[x], 'l ') then
+        begin
+          z := length(SL.Strings[x]);
+          l := '';
+          While (SL.Strings[x])[z] <> ' ' do   //read last number on line
+          begin
+            l := (SL.Strings[x])[z] + l;
+            z := z-1;
+          end;
+
+          aWedLine.LineEndList.Add(StrToInt(l));
+          aWedLine.LineStartList.Add(StrToInt(ReturnStringBetweenText(' ',' ',SL.Strings[x])));   //read middle number on line
+        end;
+      end;
+    end;
+  finally
+    SL.Free;
+  end;
+
+  {We now have a list of all verts, a list of WEDLines, and a list of LineSegment Starts and Ends where each linesegment is linked to a WedLine. Start and End values are the same as vertex values}
+
+  {start with first segment in group
+  if WEDLine children is not empty create new WEDLine, this means we have vertices shared among multiple lines?
+  add segment index to temp list
+  find connecting segment
+  add connecting segment to temp list until we have iterated length(WedLine.segment_list) times  or connecting segment cannot be found
+  add all start vertices in TempList and end vertice of last element to WEDLine children
+  remove all indexed elements in temp list from line segment group lists
+
+  if start vert = end vert then WEDLine is closed.
+  start over}
+
+  WedLineIndex :=0;
+  IndexList := TList<integer>.create;
+  While WedLineIndex <= WedLineList.Count-1 do
+  begin
+    aWedLine := WedLineList[WedLineIndex];
+    index:=aWedLine.LineStartList.Count-1;
+    iteration:=0;
+    aSearchDirection := FromEnd;
+    SwitchSearchDirection(aSearchDirection);
+
+    repeat
+      inc(iteration);
+      aWedLine.children.Add(aWedLine.LineStartList[index]); //add start vertex to WEDLine children
+      IndexList.Add(index);
+
+      connecting_index := aWedLine.LineStartList.IndexOf(aWedLine.LineEndList[index]);  //find connecting segment
+
+      {If connecting index not found and length of line = 1 then
+      search backwards procedure:
+      remove last added child
+      switch line start and line end lists
+      search again
+      If connecting index still not found
+      switch back lists and continue to split?}
+
+      If ((connecting_index = -1) and (aWedLine.children.Count <= 1) and (aSearchDirection = FromEnd)) then   //if we just started a new line and cant find a connecting index then start searching forwards instead
+      begin
+        aSearchDirection := FromBeginning;
+        SwitchSearchDirection(aSearchDirection);
+        dec(iteration);
+        continue;
+      end;
+
+
+      If connecting_index = -1 then //no connecting segment found
+      begin
+
+        aWedLine.children.Add(aWedLine.LineEndList[index]); //and end vertex of last element to WEDLine children
+
+        If aSearchDirection = FromBeginning then   //if we have searched forwards and cant find a connecting index then switch back to searching backwards and continue.
+        begin
+          aSearchDirection := FromEnd;
+          SwitchSearchDirection(aSearchDirection);
+        end;
+
+        If iteration = aWedLine.LineStartList.Count then
+          break
+        else
+        begin
+          {if we break here that means we have not found a connecting segment but there are still more vertices.
+          We need to split the line and move the rest of the vertices to a new wedline and come back to it later.}
+
+          SplitWedLine(aWedLine, indexlist);
+
+          break;
+        end;
+
+
+      end
+      else   //connecting segment found
+      begin
+
+        If iteration = aWedLine.LineStartList.Count then   //if end of list
+        begin
+          aWedLine.children.Add(aWedLine.LineEndList[index]); //and end vertex of last element to WEDLine children
+          break;
+        end
+        else
+        begin
+          If aWedLine.children.Contains(aWedLine.LineStartList[connecting_index]) then    //if the children already contains the connecting index
+          begin
+            aWedLine.children.Add(aWedLine.LineEndList[index]);
+            SplitWedLine(aWedLine, indexlist);
+          end;
+        end;
+
+        index := connecting_index;
+
+      end;
+    until (iteration >= aWedLine.LineStartList.Count);
+
+    inc(WedLineIndex);
+    IndexList.Clear;
+
+  end;
+  indexlist.Free;
+
+  For aWedLine in WedLineList do   {remove while iterating list leads to skipped elements? investigate}
+//  For x := WedLineList.Count-1 downto 0 do
+  begin
+//    aWedLine := WedLineList[x];
+
+    aWedLine.children.Capacity := aWedLine.children.count;   //free memory
+
+    if aWedLine.children.Count <> 0 then
+    begin
+      if aWedLine.children.First = aWedLine.children.Last then   //if start vert = end vert then WEDLine is closed.
+      begin
+        aWedLine.closed := true;
+        aWedLine.children.Delete(aWedLine.children.Count-1);   //remove last vertex
+        inc(ClosedCount);
+      end
+      else
+        inc(OpenCount);
+    end;
+
+    //change any nodes of any WedLines which share vertices with another WedLine
+    {Change the first node referenced in LineStartList to a newly created node to avoid duplicate node sharing among lines}
+    For aWedLineNode in WedLineNodeList do
+    begin
+      //find the node to duplicate
+      {If aWedLineNode.vertex = aWedLine.children[0] then
+        break;  }
+    //end;
+      If aWedLine.children.Contains(aWedLineNode.vertex) then
+      begin
+      //search the children of all the other WedLines to see if they contain matching vertices
+        For anotherWedLine in WedLineList do
+        begin
+          If anotherWedLine = aWedLine then
+            continue;
+          If anotherWedLine.children.Contains(aWedLineNode.vertex) then
+          begin
+            aDuplicateWedLineNode:= TWED_SimpleBezierBoundaryNode.Create;
+            aDuplicateWedLineNode.id := id_count;
+            inc(id_count);
+            aDuplicateWedLineNode.name := aWedLineNode.name+'_dup';
+            aDuplicateWedLineNode.parent_id := aWedLine.id;
+            aDuplicateWedLineNode.Y := aWedLineNode.Y;
+            aDuplicateWedLineNode.X := aWedLineNode.X;
+            aDuplicateWedLineNode.longitude := aWedLineNode.longitude;
+            aDuplicateWedLineNode.latitude := aWedLineNode.latitude;
+            aDuplicateWedLineNode.vertex := NodeCount;
+            inc(NodeCount);
+            //add Node to List
+            WedLineNodeList.Add(aDuplicateWedLineNode);
+            Memo1.Lines.Add('Duplicating WED Line Node   New Name: '+aDuplicateWedLineNode.name+'  new ID: '+IntToStr(aDuplicateWedLineNode.id)+'  new Vertex#: '+IntToStr(aDuplicateWedLineNode.vertex)+'  Parent ID: '+ IntToStr(aDuplicateWedLineNode.parent_id));
+            //change reference in LineStartList to new node vertex number determined by number of exisiting elements
+
+            aWedLine.children[aWedLine.children.IndexOf(aWedLineNode.vertex)] := aDuplicateWedLineNode.vertex; //this will be added to the wedlines children and later referenced back to an ID number from a vertex number
+            break;
+          end;
+        end;
+      end;
+    end;
+  end;
+
+  For aWedLine in WedLineList do   {remove while iterating list leads to skipped elements? investigate}
+//  For x := WedLineList.Count-1 downto 0 do
+  begin
+//    aWedLine := WedLineList[x];
+    Memo1.Lines.Add('Current WED line ID: '+IntToStr(aWedLine.id));
+
+    s := '';
+    For child in aWedLine.children do
+      s := s+IntToStr(child)+', ';
+    Memo1.Lines.Add('Line vertices are: '+s);
+
+    //change WedLine children from vertex numbers to vertex IDs
+    For x := 0 to aWedLine.children.Count-1 do
+    begin
+      For aWedLineNode in WedLineNodeList do
+      begin
+        If aWedLineNode.vertex = aWedLine.children[x] then
+        begin
+          aWedLine.children[x] := aWedLineNode.id; //existing_elements+1+aWedLine.children[x];
+          aWedLineNode.parent_id := aWedLine.id;
+          break;
+        end;
+      end;
+    end;
+
+    {For x := 0 to aWedLine.children.Count-1 do
+    begin
+      aWedLine.children[x] := existing_elements+1+aWedLine.children[x];
+    end;}
+
+    //cleanup Rings without children
+    If aWedLine.children.Count < 2 then //less than 2 Nodes means it's not a valid line
+    begin
+      Memo1.Lines.Add('Removing Empty Line '+aWedLine.name);
+      WedLineList.Remove(aWedLine);
+      //also remove them from the WedPoly children list
+      aWedGroup.children.Remove(aWedLine.id);
+    end;
+
+  end;
+
+  //add the parent_ids of WedLineNodes to the WedLines.id
+  For aWedLineNode in WedLineNodeList do
+  begin
+    For aWedLine in WedLineList do
+    begin
+      if aWedLine.children.Contains(aWedLineNode.id) then
+      begin
+        If aWedLineNode.parent_id = 0 then  //if the parent id wasn't set before
+        begin
+          Memo1.Lines.add('Setting Parent ID of '+IntToStr(aWedLineNode.id)+' to '+IntToStr(aWedLine.id)); //set it
+          aWedLineNode.parent_id := aWedLine.id;
+          break;
+        end;
+      end;
+    end;
+  end;
+
+  For aWedLineNode in WedLineNodeList do
+  begin
+  //cleanup Nodes without parents
+    If aWedLineNode.parent_id = 0 then
+    begin
+      Memo1.Lines.Add('Removing Unused Node '+aWedLineNode.name);
+      WedLineNodeList.Remove(aWedLineNode);
+    end;
+  end;
+
+  Memo1.Lines.Add('Total gMeshCount count: '+IntToStr(gMeshCount));
+  Memo1.Lines.Add('Total WED Lines created: '+IntToStr(WedLineList.Count));
+  Memo1.Lines.Add('Total open lines: '+IntToStr(OpenCount));
+  Memo1.Lines.Add('Total closed lines: '+IntToStr(ClosedCount));
+end;
+
+procedure TForm1.BuildTaxiLightList;
+var
+  child: integer;
+begin
+  BuildLineList; //resuse same code for building lines
+
+  Memo1.Lines.Add('----------');
+  Memo1.Lines.Add('Converting Lines From WED_LinePlacements to WED_AirportChains');
+  Memo1.Lines.Add('----------');
+
+  AirportNodeList := TObjectList<TWED_AirportNode>.create;
+  AirportChainList := TObjectList<TWED_AirportChain>.create;
+
+  //then change node/line list from Regular Lines to Taxi Lines
+  For aWedLineNode in WedLineNodeList do
+  begin
+    aWEDAirportNode := TWED_AirportNode.Create;
+    aWEDAirportNode.marking := MarkingComboBox.Text;
+    aWEDAirportNode.longitude := aWedLineNode.longitude;
+    aWEDAirportNode.latitude := aWedLineNode.latitude;
+    aWEDAirportNode.parent_id := aWedLineNode.parent_id;
+    aWEDAirportNode.id := aWedLineNode.id;
+    aWEDAirportNode.name := aWedLineNode.name;
+
+    AirportNodeList.Add(aWEDAirportNode)
+  end;
+
+  For aWedLine in WedLineList do
+  begin
+    aWEDAirportChain := TWED_AirportChain.Create;
+    aWEDAirportChain.closed := aWedLine.closed;
+    aWEDAirportChain.parent_id := aWedLine.parent_id;
+    aWEDAirportChain.children := aWedLine.children;
+    aWEDAirportChain.id := aWedLine.id;
+    aWEDAirportChain.name := 'Taxi Line '+ aWedLine.name;
+
+    AirportChainList.Add(aWEDAirportChain)
+  end;
+
+  Memo1.Lines.Add('Changing WED_Group name from "GP Lines" to "Taxi Lights"');
+  aWedGroup.name := 'Taxi Lights';  //change last added WEDGroup name
+
+  aWedLineNode := nil;
+  WedLineNodeList := nil;
+  aWedLine := nil;
+  WedLineList := nil;
+end;
+
+procedure TForm1.ValidateBtnClick(Sender: TObject);
+
+type TNodeRecord = record
+  id: string;
+  index: integer;
+end;
+
+var SL: TStringList;
+    aNode: TNodeRecord;
+    NodesList: TList<TNodeRecord>;
+    x,y,z: integer;
+    HasDuplicate: boolean;
+
+begin
+
+
+
+  SL := TStringList.Create;
+  NodesList := TList<TNodeRecord>.create;
+
+  try
+    SL.LoadFromFile(WEDXMLEdit.Text);
+
+    {gather all nodes}
+    x := 1;
+    While x < SL.Count do
+    begin
+      If ContainsText(SL.Strings[x], 'WED_AirportChain') then
+      begin
+        x := x+2;
+        While ContainsText(SL.Strings[x], 'child ') do
+        begin
+          aNode.id := ReturnStringBetweenText('id="', '"', SL.Strings[x]);
+          aNode.index := x;
+          NodesList.Add(aNode);
+          inc(x);
+        end;
+      end
+      else
+      begin
+        inc(x);
+      end;
+    end;
+
+    If NodesList <> nil then
+    begin
+
+      {Sort List by ids}
+      NodesList.Sort(TComparer<TNodeRecord>.Construct(
+        function (const L, R: TNodeRecord): integer
+        begin
+           if L.id=R.id then
+              Result:=0
+           else if L.id< R.id then
+              Result:=-1
+           else
+              Result:=1;
+        end
+        ));
+
+      Memo1.Lines.Add('----------All nodes---------------');
+      For aNode in NodesList do
+        Memo1.Lines.Add(aNode.id+' ,'+IntToStr(aNode.index));
+      Memo1.Lines.Add('-------------------------');
+
+      {find duplicates, remove others}
+      Memo1.Lines.Add('Removing nodes which appear only once...');
+      x := NodesList.Count-1;
+      While x > 0 do
+      begin
+        HasDuplicate := false;
+        aNode := NodesList[x];
+        For y:= 0 to NodesList.Count-1 do
+        begin
+          If ((aNode.id = NodesList[y].id) and (y<>x)) then  //check to make sure you are not comparing node against itself
+          begin
+            HasDuplicate := true;
+            break;
+          end;
+        end;
+        If HasDuplicate = false then
+          NodesList.Delete(x);
+        dec(x);
+      end;
+
+      If NodesList.Count <=1 then
+        exit;
+//      //compare first element
+//      If NodesList[0].id<>NodesList[1].id then
+//          NodesList.Delete(0);
+
+      Memo1.Lines.Add('----------Duplicate nodes---------------');
+      For aNode in NodesList do
+        Memo1.Lines.Add(aNode.id+' ,'+IntToStr(aNode.index));
+
+      {Sort List by indexes}
+      NodesList.Sort(TComparer<TNodeRecord>.Construct(
+        function (const L, R: TNodeRecord): integer
+        begin
+           if L.index=R.index then
+              Result:=0
+           else if L.index< R.index then
+              Result:=-1
+           else
+              Result:=1;
+        end
+        ));
+
+      {find duplicates, remove others}
+      Memo1.Lines.Add('---------Sorted by Index----------------');
+      For aNode in NodesList do
+        Memo1.Lines.Add(aNode.id+' ,'+IntToStr(aNode.index));
+
+      {delete duplicate children nodes from parent lines}
+      For x := NodesList.Count-1 downto 0 do
+      begin
+        Memo1.Lines.add('Deleting Line '+IntToStr(NodesList[x].index));
+        SL.Delete(NodesList[x].index);
+      end;
+
+      {delete nodes}
+      For aNode in NodesList do
+      begin
+        For x := 0 to SL.Count-1 do
+        begin
+          If ContainsText(SL.Strings[x], 'class="WED_AirportNode" id="'+aNode.id+'"') then
+          begin
+            Memo1.Lines.add('Deleting Object class="WED_AirportNode" id="'+aNode.id+'"');
+            z := x;
+            While not ContainsText(SL.Strings[z], '</object>') do //find end of object
+              inc(z);
+            For y:= z downto x do
+              SL.Delete(y);
+            break;
+          end
+        end;
+      end;
+      BackupWEDXML;
+      SL.SaveToFile(WEDXMLEdit.Text);
+
+      ValidateWEDXML;
+    end;
+  finally
+    SL.Free;
+  end;
+
+end;
+
+procedure TForm1.ValidateWEDXML;
+var SL: TStringList;
+    w,x,y,z: integer;
+    id: string;
+
+begin
+
+  SL := TStringList.Create;
+  try
+    SL.LoadFromFile(WEDXMLEdit.Text);
+
+    {Search for objects with empty children, remove them from their parents and delete them}
+    x:=0;
+    While x < SL.Count do
+    begin
+      If ContainsText(SL.Strings[x],'<children>') then
+      begin
+        If ContainsText(SL.Strings[x+1],'</children>') then
+        begin
+
+          id := ReturnStringBetweenText(' id="','"', SL.Strings[x-1]);
+          Memo1.Lines.Add('Found invalid object id '+id+'. Proceeding to remove');
+          //parent_id := ReturnStringBetweenText(' parent_id="','"', SL.Strings[x]);
+          {Delete from any parents}
+          For y := SL.Count-1 downto 0 do
+          begin
+            If ContainsText(SL.Strings[y],'<child id="'+id+'"/>') then
+            begin
+              Memo1.Lines.Add('Removing child '+id+' from parent');
+              SL.Delete(y);
+            end;
+          end;
+
+          {Delete invalid object}
+          y := x-2;
+{//I honestly don't know why this is not x-1 because the object starts on the line above but the program does not delete it.}
+          z := x;
+          While not ContainsText(SL.Strings[z], '</object>') do //find end of object
+            inc(z);
+
+          Memo1.Lines.Add('Deleting object between lines'+IntToStr(y)+' and '+IntToStr(z));
+          For w := z downto y do
+            SL.Delete(w);
+        end;
+      end;
+      inc(x);
+    end;
+
+    SL.SaveToFile(WEDXMLEdit.Text);
+  finally
+    SL.Free;
+  end;
+
+end;
+
+procedure TForm1.GenerateXML;
+var SL: TStringList;
+    XMLText, Top, Bottom: string;
+    child, x: integer;
+begin
+
+  Memo1.Lines.Add('Generating XML...');
+
+  XMLText := '';
+
+  //build WED_Groups
+  If WedGroupList <> nil then
+  begin
+    For aWedGroup in WedGroupList do
+    begin
+
+      Memo1.Lines.Add('Adding new WED_Group and children...');
+      XMLText :=  XMLText + #9+#9+'<object class="WED_Group" id="'+IntToStr(aWedGroup.id)+'" parent_id="'+IntToStr(aWedGroup.parent_id)+'">'+sLineBreak+
+                            #9+#9+#9+'<children>'+sLineBreak;
+      For child in aWEDGroup.children do
+        XMLText :=  XMLText + #9+#9+#9+#9+'<child id="'+IntToStr(child)+'"/>'+sLineBreak;
+
+      XMLText :=  XMLText + #9+#9+#9+'</children>'+sLineBreak+
+                            #9+#9+#9+'<hierarchy name="'+aWedGroup.name+'" locked="0" hidden="0"/>'+sLineBreak+
+                            #9+#9+'</object>'+sLineBreak;
+    end;
+  end;
+
+  //build WED_PolygonPlacement object and children
+  If WedOrthoList <> nil then
+  begin
+    Memo1.Lines.Add('Adding WED_DrapedOrthophoto objects and children...');
+    For aWedOrtho in WedOrthoList do
+    begin
+      XMLText :=  XMLText + #9+#9+'<object class="WED_DrapedOrthophoto" id="'+IntToStr(aWedOrtho.id)+'" parent_id="'+IntToStr(aWedOrtho.parent_id)+'">'+sLineBreak+
+                            #9+#9+#9+'<children>'+sLineBreak;
+
+      For child in aWedOrtho.children do
+        XMLText :=  XMLText + #9+#9+#9+#9+'<child id="'+IntToStr(child)+'"/>'+sLineBreak;
+
+      XMLText :=  XMLText + #9+#9+#9+'</children>'+sLineBreak+
+                            #9+#9+#9+'<hierarchy name="'+aWedOrtho.name+'" locked="0" hidden="0"/>'+sLineBreak+
+                            #9+#9+#9+'<draped_orthophoto heading="'+FloatToStr(aWedOrtho.heading)+'" resource="'+aWedOrtho.resource+'" tex_top="'+FloatToStr(aWedOrtho.TexTop)+'" tex_bottom="'+FloatToStr(aWedOrtho.TexBottom)+'" tex_left="'+FloatToStr(aWedOrtho.TexLeft)+'" tex_right="'+FloatToStr(aWedOrtho.TexRight)+'"/>'+sLineBreak+
+                            #9+#9+'</object>'+sLineBreak;
+    end;
+  end;
+
+  //Build WED_Ring and children
+  If WedRingList <> nil then
+  begin
+    Memo1.Lines.Add('Adding WED_Ring objects and children...');
+    For aWedRing in WedRingList do
+    begin
+
+      XMLText :=  XMLText + #9+#9+'<object class="WED_Ring" id="'+IntToStr(aWedRing.id)+'" parent_id="'+IntToStr(aWedRing.parent_id)+'">'+sLineBreak+
+                            #9+#9+#9+'<children>'+sLineBreak;
+
+      For child in aWedRing.children do
+        XMLText :=  XMLText + #9+#9+#9+#9+'<child id="'+IntToStr(child)+'"/>'+sLineBreak;
+
+      XMLText :=  XMLText + #9+#9+#9+'</children>'+sLineBreak+
+                            #9+#9+#9+'<hierarchy name="'+aWedRing.name+'" locked="0" hidden="0"/>'+sLineBreak+
+                            #9+#9+'</object>'+sLineBreak;
+    end;
+  end;
+
+  //Build WED_Nodes
+  If WedNodeList <> nil then
+  begin
+    Memo1.Lines.Add('Adding WED_TextureBezierNode objects...');
+    For aWedNode in WedNodeList do
+    begin
+
+      XMLText :=  XMLText + #9+#9+'<object class="WED_TextureBezierNode" id="'+IntToStr(aWedNode.id)+'" parent_id="'+IntToStr(aWedNode.parent_id)+'">'+sLineBreak+
+                            #9+#9+#9+'<children/>'+sLineBreak+
+                            #9+#9+#9+'<hierarchy name="'+aWedNode.name+'" locked="0" hidden="0"/>'+sLineBreak+
+                            #9+#9+#9+'<point latitude="'+aWedNode.latitude+'" longitude="'+aWedNode.longitude+'" split="0" ctrl_latitude_lo="0.0" ctrl_longitude_lo="0.0" ctrl_latitude_hi="0.0" ctrl_longitude_hi="0.0"/>'+sLineBreak+
+                            #9+#9+#9+'<texture_node s="'+FloatToStr(aWedNode.S)+'" t="'+FloatToStr(aWedNode.T)+'" sc_lo="0.0" tc_lo="0.0" sc_hi="0.0" tc_hi="0.0"/>'+sLineBreak+
+                            #9+#9+'</object>'+sLineBreak;
+
+    end;
+  end;
+
+  //Build WED_LinePlacement and children
+  If WedLineList <> nil then
+  begin
+    Memo1.Lines.Add('Adding WED_LinePlacement objects and children...');
+    For aWedLine in WedLineList do
+    begin
+
+      XMLText :=  XMLText + #9+#9+'<object class="WED_LinePlacement" id="'+IntToStr(aWedLine.id)+'" parent_id="'+IntToStr(aWedLine.parent_id)+'">'+sLineBreak+
+                            #9+#9+#9+'<children>'+sLineBreak;
+
+      For child in aWedLine.children do
+        XMLText :=  XMLText + #9+#9+#9+#9+'<child id="'+IntToStr(child)+'"/>'+sLineBreak;
+
+      XMLText :=  XMLText + #9+#9+#9+'</children>'+sLineBreak+
+                            #9+#9+#9+'<hierarchy name="'+aWedLine.name+'" locked="0" hidden="0"/>'+sLineBreak+
+                            #9+#9+#9+'<line_placement resource="'+aWedLine.resource+'" closed="'+IntToStr(BooltoInt(aWedLine.closed))+'"/>'+sLineBreak+
+                            #9+#9+'</object>'+sLineBreak;
+    end;
+  end;
+
+  //Build WED_Line_Nodes
+  If WedLineNodeList <> nil then
+  begin
+    Memo1.Lines.Add('Adding WED_SimpleBezierBoundaryNode objects...');
+    For aWedLineNode in WedLineNodeList do
+    begin
+
+      XMLText :=  XMLText + #9+#9+'<object class="WED_SimpleBezierBoundaryNode" id="'+IntToStr(aWedLineNode.id)+'" parent_id="'+IntToStr(aWedLineNode.parent_id)+'">'+sLineBreak+
+                            #9+#9+#9+'<children/>'+sLineBreak+
+                            #9+#9+#9+'<hierarchy name="'+aWedLineNode.name+'" locked="0" hidden="0"/>'+sLineBreak+
+                            #9+#9+#9+'<point latitude="'+aWedLineNode.latitude+'" longitude="'+aWedLineNode.longitude+'" split="0" ctrl_latitude_lo="0.0" ctrl_longitude_lo="0.0" ctrl_latitude_hi="0.0" ctrl_longitude_hi="0.0"/>'+sLineBreak+
+                            #9+#9+'</object>'+sLineBreak;
+
+    end;
+  end;
+
+  //Build WED_Ramps
+  If WedRampList <> nil then
+  begin
+    Memo1.Lines.Add('Adding WED_RampPosition objects...');
+    For aWedRamp in WedRampList do
+    begin
+
+      XMLText :=  XMLText + #9+#9+'<object class="WED_RampPosition" id="'+IntToStr(aWedRamp.id)+'" parent_id="'+IntToStr(aWedRamp.parent_id)+'">'+sLineBreak+
+                            #9+#9+#9+'<children/>'+sLineBreak+
+                            #9+#9+#9+'<hierarchy name="'+aWedRamp.name+'" locked="0" hidden="0"/>'+sLineBreak+
+                            #9+#9+#9+'<point latitude="'+aWedRamp.lat+'" longitude="'+aWedRamp.long+'" heading="'+aWedRamp.heading+'"/>'+sLineBreak+
+                            #9+#9+#9+'<ramp_start type="'+aWedRamp.ramptype+'" traffic="'+IntToStr(BinaryStringToDecimal(aWedRamp.trafficbinary))+'" width="'+aWedRamp.width_letter+'" ramp_op_type="'+aWedRamp.ramp_op_type+'" airlines="'+aWedRamp.airlines+'"/>'+sLineBreak+
+                            #9+#9+'</object>'+sLineBreak;
+
+    end;
+  end;
+
+  //Build WED_TaxiRouteNodes
+  If TaxiNodeList <> nil then
+  begin
+    Memo1.Lines.Add('Adding WED_TaxiRouteNodes objects and viewers...');
+    For aWEDTaxiNode in TaxiNodeList do
+    begin
+
+      XMLText :=  XMLText + #9+#9+'<object class="WED_TaxiRouteNode" id="'+IntToStr(aWEDTaxiNode.id)+'" parent_id="'+IntToStr(aWEDTaxiNode.parent_id)+'">'+sLineBreak+
+                            #9+#9+#9+'<viewers>'+sLineBreak;
+
+      For child in aWEDTaxiNode.viewers do
+        XMLText :=  XMLText + #9+#9+#9+#9+'<viewer id="'+IntToStr(child)+'"/>'+sLineBreak;
+
+      XMLText :=  XMLText + #9+#9+#9+'</viewers>'+sLineBreak+
+                            #9+#9+#9+'<children/>'+sLineBreak+
+                            #9+#9+#9+'<hierarchy name="'+aWEDTaxiNode.name+'" locked="0" hidden="0"/>'+sLineBreak+
+                            #9+#9+#9+'<point latitude="'+aWEDTaxiNode.latitude+'" longitude="'+aWEDTaxiNode.longitude+'"/>'+sLineBreak+
+                            #9+#9+'</object>'+sLineBreak;
+    end;
+  end;
+
+  //Build WED_TaxiRoutes
+  If TaxiRouteList <> nil then
+  begin
+    Memo1.Lines.Add('Adding WED_TaxiRoutes objects and sources...');
+    For aWEDTaxiRoute in TaxiRouteList do
+    begin
+
+      XMLText :=  XMLText + #9+#9+'<object class="WED_TaxiRoute" id="'+IntToStr(aWEDTaxiRoute.id)+'" parent_id="'+IntToStr(aWEDTaxiRoute.parent_id)+'">'+sLineBreak+
+                            #9+#9+#9+'<sources>'+sLineBreak;
+
+      For child in aWEDTaxiRoute.sources do
+        XMLText :=  XMLText + #9+#9+#9+#9+'<source id="'+IntToStr(child)+'"/>'+sLineBreak;
+
+      XMLText :=  XMLText + #9+#9+#9+'</sources>'+sLineBreak+
+                            #9+#9+#9+'<children/>'+sLineBreak+
+                            #9+#9+#9+'<hierarchy name="'+aWEDTaxiRoute.name+'" locked="0" hidden="0"/>'+sLineBreak+
+                            #9+#9+#9+'<edge ctrl_latitude_lo="0.0" ctrl_longitude_lo="0.0" ctrl_latitude_hi="0.0" ctrl_longitude_hi="0.0"/>'+sLineBreak+
+                            #9+#9+#9+'<taxi_route vehicle_class="'+aWEDTaxiRoute.vehicle_class+'" oneway="0" runway="None" width="'+aWEDTaxiRoute.width_letter+'"/>'+sLineBreak+
+                            #9+#9+#9+'<departures/>'+sLineBreak+
+                            #9+#9+#9+'<arrivals/>'+sLineBreak+
+                            #9+#9+#9+'<ils_holds/>'+sLineBreak+
+                            #9+#9+'</object>'+sLineBreak;
+    end;
+  end;
+
+  //Build WED_TruckParkingLocation
+  If TruckParkingList <> nil then
+  begin
+    Memo1.Lines.Add('Adding WED_TruckParkingLocation objects...');
+    For aWEDTruckParking in TruckParkingList do
+    begin
+
+      XMLText :=  XMLText + #9+#9+'<object class="WED_TruckParkingLocation" id="'+IntToStr(aWEDTruckParking.id)+'" parent_id="'+IntToStr(aWEDTruckParking.parent_id)+'">'+sLineBreak+
+                            #9+#9+#9+'<children/>'+sLineBreak+
+                            #9+#9+#9+'<hierarchy name="'+aWEDTruckParking.name+'" locked="0" hidden="0"/>'+sLineBreak+
+                            #9+#9+#9+'<point latitude="'+aWEDTruckParking.latitude+'" longitude="'+aWEDTruckParking.longitude+'" heading="'+aWEDTruckParking.heading+'"/>'+sLineBreak+
+                            #9+#9+#9+'<truck_parking_spot type="'+aWEDTruckParking.trucktype+'" number_of_cars="0"/>'+sLineBreak+
+                            #9+#9+'</object>'+sLineBreak;
+    end;
+  end;
+
+  //Build WED_ObjPlacement
+  If ObjPlacementList <> nil then
+  begin
+
+    Memo1.Lines.Add('Adding WED_ObjPlacement objects...');
+    For aWEDObjPlacement in ObjPlacementList do
+    begin
+
+      XMLText :=  XMLText + #9+#9+'<object class="WED_ObjPlacement" id="'+IntToStr(aWEDObjPlacement.id)+'" parent_id="'+IntToStr(aWEDObjPlacement.parent_id)+'">'+sLineBreak+
+                            #9+#9+#9+'<children/>'+sLineBreak+
+                            #9+#9+#9+'<hierarchy name="'+aWEDObjPlacement.name+'" locked="0" hidden="0"/>'+sLineBreak+
+                            #9+#9+#9+'<point latitude="'+aWEDObjPlacement.latitude+'" longitude="'+aWEDObjPlacement.longitude+'" heading="'+aWEDObjPlacement.heading+'"/>'+sLineBreak+
+                            #9+#9+#9+'<obj_placement custom_msl="'+BoolToString(aWEDObjPlacement.customMSL)+'" msl="'+aWEDObjPlacement.MSL+'" resource="'+aWEDObjPlacement.resource+'" show_level="1 Default"/>'+sLineBreak+
+                            #9+#9+'</object>'+sLineBreak;
+    end;
+  end;
+
+  //Build WED_AirportNodes
+  If AirportNodeList <> nil then
+  begin
+    Memo1.Lines.Add('Adding WED_AirportNodes objects and viewers...');
+    For aWEDAirportNode in AirportNodeList do
+    begin
+
+      XMLText :=  XMLText + #9+#9+'<object class="WED_AirportNode" id="'+IntToStr(aWEDAirportNode.id)+'" parent_id="'+IntToStr(aWEDAirportNode.parent_id)+'">'+sLineBreak+
+                            #9+#9+#9+'<children/>'+sLineBreak+
+                            #9+#9+#9+'<hierarchy name="'+aWEDAirportNode.name+'" locked="0" hidden="0"/>'+sLineBreak+
+                            #9+#9+#9+'<point latitude="'+aWEDAirportNode.latitude+'" longitude="'+aWEDAirportNode.longitude+'" split="0" ctrl_latitude_lo="0.0" ctrl_longitude_lo="0.0" ctrl_latitude_hi="0.0" ctrl_longitude_hi="0.0"/>'+sLineBreak+
+                            #9+#9+#9+'<markings>'+sLineBreak+
+                            #9+#9+#9+#9+'<marking value="'+aWEDAirportNode.marking+'"/>'+sLineBreak+
+                            #9+#9+#9+'</markings>'+sLineBreak+
+                            #9+#9+'</object>'+sLineBreak;
+    end;
+  end;
+
+  //Build WED_AirportChains
+  If AirportChainList <> nil then
+  begin
+    Memo1.Lines.Add('Adding WED_AirportChains objects and children...');
+    For aWEDAirportChain in AirportChainList do
+    begin
+
+      XMLText :=  XMLText + #9+#9+'<object class="WED_AirportChain" id="'+IntToStr(aWEDAirportChain.id)+'" parent_id="'+IntToStr(aWEDAirportChain.parent_id)+'">'+sLineBreak+
+                            #9+#9+#9+'<children>'+sLineBreak;
+
+      For child in aWEDAirportChain.children do
+        XMLText :=  XMLText + #9+#9+#9+#9+'<child id="'+IntToStr(child)+'"/>'+sLineBreak;
+
+      XMLText :=  XMLText + #9+#9+#9+'</children>'+sLineBreak+
+                            #9+#9+#9+'<hierarchy name="'+aWEDAirportChain.name+'" locked="0" hidden="0"/>'+sLineBreak+
+                            #9+#9+#9+'<airport_chain closed="'+BoolToString(aWEDAirportChain.closed)+'"/>'+sLineBreak+
+                            #9+#9+'</object>'+sLineBreak;
+    end;
+  end;
+
+
+
+  Memo1.Lines.Add('Saving to File '+WEDXMLEdit.Text);
+  SL:= TStringList.Create;
+  try
+    SL.LoadFromFile(WEDXMLEdit.Text);
+    //edit XML comment
+    SL.Text := StringReplace(SL.Text,SL.Strings[1],'<!-- written by FSGP2XP (c) Zev Richards of Richer Simulations -->', [rfReplaceAll]);
+
+    //Add the new XML objects we generated
+    x := SL.IndexOf('  </objects>');
+    SL.Insert(x,XMLText);
+
+    //Search for the end of the world group and Add the WEDGroups to the "world"s children
+    //Groups for Taxi Routes and Ramp Starts go in the airport group's children
+
+    For aWEDGroup in WedGroupList do
+    begin
+//      If (aWEDGroup.name <> 'Ramp Starts') or (aWEDGroup.name <> 'Taxi Routes') then
+//      begin
+        x := SL.IndexOf('      <hierarchy name="world" locked="0" hidden="0"/>');
+        SL.Insert(x-1,'        <child id="'+IntToStr(aWedGroup.id)+'"/>');
+//      end
+//      else
+//      begin
+//        x := SL.IndexOf('    <object class="WED_Airport" id="'+IntToStr(aWedGroup.parent_id)+'" parent_id="4">');
+//        SL.Insert(x+2,'        <child id="'+IntToStr(aWedGroup.id)+'"/>');
+//      end;
+    end;
+    SL.SaveToFile(WEDXMLEdit.Text);
+    Memo1.Lines.Add('Finished saving!');
+  finally
+    SL.Free;
+  end;
+
+
+end;
+
+procedure TForm1.NewWedLine(LineStartList, LineEndList: TList<Integer>; aWedLineList:TObjectList<TWed_LinePlacement>);
+begin
+  //initialize WED_LinePlacemet
+  aWedLine:= TWED_LinePlacement.Create;
+  aWedLine.id := id_count;
+  inc(id_count);
+  aWedLine.parent_id := aWedGroup.id;
+  aWedGroup.children.Add(aWedLine.id); //add to child list of parent
+  aWedLine.name := TPath.GetFileNameWithoutExtension(OBJEdit.Text)+'_'+IntToStr(id_count-1);
+  aWedLine.resource := PolPathEdit.Text+'\' + PolEdit.Text +'.lin';
+  aWedLine.children := TList<Integer>.create;  //create empty list for children to be added later
+  aWedLine.LineStartList := TList<Integer>.create;
+  aWedLine.LineEndList := TList<Integer>.create;
+  If LineStartList <> nil then
+    aWedLine.LineStartList.AddRange(LineStartList);
+  If LineEndList <> nil then
+    aWedLine.LineEndList.AddRange(LineEndList);
+
+  aWedLine.closed := false;
+  aWedLineList.add(aWedLine);
+  Memo1.Lines.Add('WED Line  ID: '+IntToStr(aWedLine.id)+'  Parent ID: '+ IntToStr(aWedLine.parent_id)+'  Name/Resource: '+aWedLine.name);
+end;
+
+procedure TForm1.SplitWedLine(aWedLine: TWED_LinePlacement; indexlist: TList<integer>);
+var x: integer;
+begin
+  indexlist.Sort;
+  indexlist.Reverse;
+  For x in indexlist do
+  begin
+    aWedLine.LineStartList.delete(x);
+    aWedLine.LineEndList.delete(x);
+  end;
+
+  NewWedLine(aWedLine.LineStartList, aWedLine.LineEndList, WedLineList); //move all remaining linesegements to a newly created line, add the new wedline to the end of the wedline list and move on to to the next wedline
+end;
+
+procedure TForm1.SwitchSearchDirection(SearchDirection: TDirection);
+var TempList: TList<integer>;
+begin
+
+  TempList := TList<integer>.create;
+
+  try
+    If SearchDirection = FromBeginning then  //remove last added child and index
+    begin
+      If aWedLine.children.Count >= 1 then
+      begin
+        aWedLine.children.delete(aWedLine.children.Count-1);
+        IndexList.delete(IndexList.Count-1);
+      end;
+    end;
+
+    //switch line start and line end lists
+    TempList.AddRange(aWedLine.LineStartList);
+    aWedLine.LineStartList.Clear;
+    aWedLine.LineStartList.AddRange(aWedLine.LineEndList);
+    aWedLine.LineEndList.Clear;
+    aWedLine.LineEndList.AddRange(TempList);
+  finally
+    TempList.Free;
+  end;
+
+end;
+
+procedure TForm1.TaxiLightObjButtonClick(Sender: TObject);
+begin
+  OpenTextFileDialog1.Filter := 'OBJ files (*.obj)|*.OBJ';
+  OpenTextFileDialog1.options := [];
+  If OpenTextFileDialog1.Execute() then
+  begin
+    OBJEdit.Text := OpenTextFileDialog1.FileName;
+    EnableProcess;
+
+    ResetGlobalVariables;
+
+  end;
+end;
+
+procedure TForm1.UseXMLBtnClick(Sender: TObject);
+begin
+
+  If UseXMLBtn.Caption <> 'Cancel' then
+  begin
+    OpenTextFileDialog1.Filter := 'XML files (*.xml)|*.XML';
+    OpenTextFileDialog1.options := [];
+    If OpenTextFileDialog1.Execute() then
+    begin
+
+      OBJLatEdit.Text := 'From '+TPath.GetFileNameWithoutExtension(OpenTextFileDialog1.FileName)+'.xml';
+      OBJLatEdit.Enabled := false;
+      OBJLongEdit.Text := 'From '+TPath.GetFileNameWithoutExtension(OpenTextFileDialog1.FileName)+'.xml';
+      OBJLongEdit.Enabled := false;
+      HeadingEdit.Text := 'From '+TPath.GetFileNameWithoutExtension(OpenTextFileDialog1.FileName)+'.xml';
+      HeadingEdit.Enabled := false;
+      MSLEdit.Text := 'From '+TPath.GetFileNameWithoutExtension(OpenTextFileDialog1.FileName)+'.xml';
+      MSLEdit.Enabled := false;
+      SetMSLCheckBox.Enabled := false;
+      UseXMLBtn.Caption := 'Cancel';
+      ObjMemo.Lines := OpenTextFileDialog1.Files;
+
+      ResetGlobalVariables;
+
+    end;
+  end
+  else
+  begin
+    OBJLatEdit.Text := ReturnStringBetween(OBJLatEdit.Name+'=', sLineBreak, ExtractFilePath(Application.ExeName)+'FSGP2XP.fs');
+    OBJLatEdit.Enabled := true;
+    OBJLongEdit.Text := ReturnStringBetween(OBJLongEdit.Name+'=', sLineBreak, ExtractFilePath(Application.ExeName)+'FSGP2XP.fs');
+    OBJLongEdit.Enabled := true;
+    HeadingEdit.Text := ReturnStringBetween(HeadingEdit.Name+'=', sLineBreak, ExtractFilePath(Application.ExeName)+'FSGP2XP.fs');
+    HeadingEdit.Enabled := true;
+    MSLEdit.Text := ReturnStringBetween(MSLEdit.Name+'=', sLineBreak, ExtractFilePath(Application.ExeName)+'FSGP2XP.fs');
+    MSLEdit.Enabled := true;
+    SetMSLCheckBox.checked := StrToBool(ReturnStringBetween(SetMSLCheckBox.Name+'=', sLineBreak, ExtractFilePath(Application.ExeName)+'FSGP2XP.fs'));
+    SetMSLCheckBox.Enabled := true;
+    UseXMLBtn.Caption := 'Use XML'
+  end;
+end;
+
+procedure TForm1.ResetGlobalVariables;
+begin
+    id_count := 0;
+    hole_count := 0;
+    existing_elements := 0;
+    WedGroupList := nil;
+    aWedGroup := nil;
+    aWedOrtho  := nil;
+    aWedRing := nil;
+    aWedNode := nil;
+    WedOrthoList := nil;
+    WedRingList := nil;
+    WedNodeList := nil;
+    aWedLine := nil;
+    aWedLineNode := nil;
+    WedLineList := nil;
+    WedLineNodeList := nil;
+    IndexList := nil;
+    aWEDTruckParking := nil;
+    TruckParkingList := nil;
+    aWEDObjPlacement:= nil;
+    ObjPlacementList:= nil;
+    AirportNodeList := nil;
+    aWEDAirportNode := nil;
+    AirportChainList := nil;
+    aWEDAirportChain := nil;
+    Memo1.Lines.Clear;
+end;
+
+procedure TForm1.MDLNameEdit;
+var s,NewName: string;
+    FS: TFileStream;
+    aSection: TMDLSection;
+    b: byte;
+    data: Tbytes;
+    i, idx, datalength, InsertPosition, InsertLength: integer;
+
+begin
+
+  For s in MDLMemo.Lines do
+  begin
+    NewName := StringReplace(ExtractFileName(s),'.mdl','',[])+#0;
+    //open file read/write
+    //read first section label
+    //read size of data
+    //fead data from 0 to size of data
+    //interpret data according to section label
+    //next section
+    FS:= TFileStream.Create(S, fmOpenReadWrite{ or fmShareDenyWrite});
+    try
+      While FS.Position < FS.Size do
+      begin
+        aSection := TMDLSection.Create;
+        aSection.data := nil;
+        aSection.labelname := '';
+        data := nil;
+        //read section label
+        For i := 1 to 4 do
+        begin
+          FS.Read(b,sizeof(b));
+          SetLength(data, length(data)+1);
+          data[High(data)] := b;
+        end;
+        aSection.labelname := TEncoding.UTF8.GetString(data);
+
+        If aSection.labelname = 'RIFF' then
+          //skip header
+          FS.Seek(8, soFromCurrent)
+        else
+        begin
+          //read size of data
+          FS.Read(aSection.size,sizeof(aSection.size));
+          //if this is NOT the MDLN section
+          If aSection.labelname <> 'MDLN' then
+          //seek forward by size
+            FS.Seek(aSection.size,soFromCurrent)
+          else
+          begin
+            //else seek backward by size of int
+            FS.Seek(sizeof(integer)*-1,soFromCurrent);
+            //integer value size of NewName
+            datalength := length(NewName);
+            //difference between space left for old name and space required for new name
+            InsertLength := datalength-aSection.size;
+            //write new data length
+            FS.write(datalength, sizeof(datalength));
+            //Save current position to come back to later
+            InsertPosition := FS.Position;
+
+            {We will need to read all characters from current position + length of oldname (i.e. section.size) to EOF and copy them downwards "Insert" spaces to make space for NewName length}
+            //We are now at the beginning of the Section Length integer for MDLN. Seek forward to the next section(i.e PARA)
+            FS.Seek(aSection.size, soFromCurrent);
+            //prepare array of bytes for rest of file
+            data := nil;
+            SetLength(data, FS.Size);
+            For idx := 1 to length(data) do
+              data[idx] := 0;
+            //read all characters from current position to EOF and save how many bytes we've read in datalength
+            datalength := FS.Read(data, FS.size);
+//            ShowMessage(IntToStr(datalength));
+
+            //seek back to insertion point which is beginning of friendly name in MDLN section
+            FS.Position := InsertPosition;
+
+            //convert NewName to ch and write
+            for idx := 1 to length(NewName) do
+            begin
+              b := Byte(NewName[idx]);
+              FS.Write(b,sizeof(b));
+            end;
+
+            //append rest of file
+            FS.Write(data, datalength);
+
+            //go back to RIFF header
+            Fs.Position := 4;
+            //read section size
+            FS.Read(aSection.size, sizeof(aSection.size));
+            //seek back to beginning of section size
+            FS.Seek(sizeof(aSection.size)*-1, soFromCurrent);
+            //write new section size (+InsertLength)
+            datalength := aSection.size+length(newname);
+            FS.Write(datalength, sizeof(datalength));
+          end;
+
+
+
+        end;
+        aSection.Free;
+      end;
+    finally
+      FS.Free;
+    end;
+
+  end;
+
+
+//  For s in MDLMemo.Lines do
+//  begin
+//  aStream := TStream.Create;
+//  try
+//
+//      aStream.LoadFromFile(s);
+//      NewName := StringReplace(ExtractFileName(s),'.mdl','',[]);
+//      aStream.WriteString(StringReplace(aStream.DataString,CommonNameEdit.text,NewName,[]));
+//      aStream.SaveToFile(s);
+//
+//
+//  finally
+//    SS.Free;
+//  end;
+//  end;
+//  MDLMemo.Lines.Add('Done editing names.');
+end;
+
+end.
