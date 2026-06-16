@@ -2,8 +2,8 @@ object Form1: TForm1
   Left = 0
   Top = 0
   Caption = 'Fligh Sim Ground Polygon to XPlane'
-  ClientHeight = 533
-  ClientWidth = 668
+  ClientHeight = 596
+  ClientWidth = 814
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -18,57 +18,57 @@ object Form1: TForm1
   object PageControl1: TPageControl
     Left = 8
     Top = 40
-    Width = 657
-    Height = 194
-    ActivePage = GPTab
+    Width = 801
+    Height = 273
+    ActivePage = ObjectTab
     TabOrder = 0
     object GPTab: TTabSheet
       Caption = 'Ground Poly Conversion'
       object Label1: TLabel
         Left = 4
-        Top = 86
+        Top = 150
         Width = 133
         Height = 13
         Caption = 'Relative Path to .pol/.lin file'
       end
       object Label2: TLabel
         Left = 289
-        Top = 85
+        Top = 149
         Width = 82
         Height = 13
         Caption = '.pol/.lin file name'
       end
       object LatLabel: TLabel
         Left = 67
-        Top = 35
+        Top = 99
         Width = 70
         Height = 13
         Caption = 'Origin Latitude'
       end
       object LongLabel: TLabel
         Left = 289
-        Top = 35
+        Top = 99
         Width = 82
         Height = 13
         Caption = 'Origin Longtitude'
       end
       object TexRotLabel: TLabel
         Left = 55
-        Top = 64
+        Top = 128
         Width = 82
         Height = 13
         Caption = 'Texture Rotation'
       end
       object Label9: TLabel
         Left = 64
-        Top = 113
+        Top = 177
         Width = 73
         Height = 13
         Caption = 'Taxi Light Type'
       end
       object LatEdit: TEdit
         Left = 143
-        Top = 32
+        Top = 96
         Width = 136
         Height = 21
         TabOrder = 0
@@ -76,7 +76,7 @@ object Form1: TForm1
       end
       object LongEdit: TEdit
         Left = 377
-        Top = 32
+        Top = 96
         Width = 136
         Height = 21
         TabOrder = 1
@@ -91,81 +91,76 @@ object Form1: TForm1
         TabOrder = 2
         OnClick = OBJButtonClick
       end
-      object OBJEdit: TEdit
-        Left = 143
-        Top = 8
-        Width = 503
-        Height = 21
-        BiDiMode = bdRightToLeft
-        Enabled = False
-        ParentBiDiMode = False
-        TabOrder = 3
-        Text = 
-          'E:\Program Files\X-Plane 11\Custom Scenery\RS_TBPB_2020\objects\' +
-          'GP DWG export\taxi_light_lines.obj'
-      end
       object PolEdit: TEdit
         Left = 377
-        Top = 82
+        Top = 146
         Width = 136
         Height = 21
-        TabOrder = 4
-        Text = 'grass_edging_0'
+        TabOrder = 3
       end
       object PolPathEdit: TEdit
         Left = 143
-        Top = 83
+        Top = 147
         Width = 136
         Height = 21
-        TabOrder = 5
+        TabOrder = 4
         Text = 'Objects\GP\'
+        OnChange = PolPathEditChange
         OnExit = PolPathEditExit
       end
       object ProcessLinesButton: TButton
         Left = 242
-        Top = 137
+        Top = 201
         Width = 169
         Height = 25
         Caption = 'Process Lines'
-        TabOrder = 6
+        TabOrder = 5
         OnClick = ProcessLinesButtonClick
       end
       object ProcessPolysButton: TButton
         Left = 67
-        Top = 137
+        Top = 201
         Width = 169
         Height = 25
         Caption = 'Process Polygons'
-        TabOrder = 7
+        TabOrder = 6
         OnClick = ProcessPolysButtonClick
       end
       object TexRotEdit: TEdit
         Left = 143
-        Top = 59
+        Top = 123
         Width = 136
         Height = 21
-        TabOrder = 8
+        TabOrder = 7
         Text = '-13.96'
       end
       object ProcessTaxiLightsBtn: TButton
         Left = 417
-        Top = 137
+        Top = 201
         Width = 169
         Height = 25
         Caption = 'Process Taxi Lights'
-        TabOrder = 9
+        TabOrder = 8
         OnClick = ProcessTaxiLightsBtnClick
       end
       object MarkingComboBox: TComboBox
         Left = 143
-        Top = 110
+        Top = 174
         Width = 190
         Height = 21
         ItemIndex = 0
-        TabOrder = 10
+        TabOrder = 9
         Text = 'Taxiway Centerline Lights (Green)'
         Items.Strings = (
           'Taxiway Centerline Lights (Green)')
+      end
+      object OBJProcessMemo: TMemo
+        Left = 143
+        Top = 3
+        Width = 647
+        Height = 87
+        ScrollBars = ssBoth
+        TabOrder = 10
       end
     end
     object ParkingTab: TTabSheet
@@ -182,7 +177,7 @@ object Form1: TForm1
       end
       object ParkingXMLEdit: TEdit
         Left = 143
-        Top = 8
+        Top = 3
         Width = 503
         Height = 21
         Alignment = taRightJustify
@@ -190,9 +185,6 @@ object Form1: TForm1
         Enabled = False
         ParentBiDiMode = False
         TabOrder = 1
-        Text = 
-          'E:\Program Files\X-Plane 11\Custom Scenery\RS_TBPB_2020\Objects\' +
-          'GP DWG export\TBPB_ADE.xml'
       end
       object ProcessADEBtn: TButton
         Left = 231
@@ -242,6 +234,17 @@ object Form1: TForm1
         Height = 13
         Caption = 'Relative Path'
       end
+      object Label7: TLabel
+        Left = 120
+        Top = 207
+        Width = 450
+        Height = 26
+        Caption = 
+          'This tab-delimited list can be obtained from ADE: Lists > Librar' +
+          'ies Used. Copy and Save it into any text file to load here. Be s' +
+          'ure to replace the BGL name with the full XPlane Library.'
+        WordWrap = True
+      end
       object LoadXPOBJBtn: TButton
         Left = 3
         Top = 1
@@ -260,10 +263,10 @@ object Form1: TForm1
         TabOrder = 1
         OnClick = PlaceOBJBtnClick
       end
-      object ObjMemo: TMemo
+      object ObjPlaceMemo: TMemo
         Left = 178
-        Top = 3
-        Width = 467
+        Top = 1
+        Width = 612
         Height = 129
         ScrollBars = ssBoth
         TabOrder = 2
@@ -316,6 +319,7 @@ object Form1: TForm1
         Height = 21
         TabOrder = 8
         Text = 'Objects\'
+        OnChange = ObjPathEditChange
         OnExit = ObjPathEditExit
       end
       object UseXMLBtn: TButton
@@ -327,6 +331,22 @@ object Form1: TForm1
         TabOrder = 9
         OnClick = UseXMLBtnClick
       end
+      object LibraryButton: TButton
+        Left = 120
+        Top = 180
+        Width = 105
+        Height = 25
+        Caption = 'Load Libraries Used'
+        TabOrder = 10
+        OnClick = LibraryButtonClick
+      end
+      object LibraryEdit: TEdit
+        Left = 231
+        Top = 180
+        Width = 536
+        Height = 21
+        TabOrder = 11
+      end
     end
     object TabSheet1: TTabSheet
       Caption = 'MDL Name Edit'
@@ -334,14 +354,14 @@ object Form1: TForm1
       object MDLMemo: TMemo
         Left = 179
         Top = 3
-        Width = 467
+        Width = 611
         Height = 129
         ScrollBars = ssBoth
         TabOrder = 0
       end
       object LoadMDLBtn: TButton
-        Left = 35
-        Top = 11
+        Left = 36
+        Top = 19
         Width = 97
         Height = 22
         Caption = 'Load MDLs'
@@ -358,12 +378,42 @@ object Form1: TForm1
         OnClick = EditMDLNamesBtnClick
       end
     end
+    object GLTFNodeRenamer: TTabSheet
+      Caption = 'GLTF Node Renamer'
+      ImageIndex = 4
+      object LoadGLTFBtn: TButton
+        Left = 43
+        Top = 19
+        Width = 97
+        Height = 22
+        Caption = 'Load GLTFs'
+        TabOrder = 0
+        OnClick = LoadGLTFBtnClick
+      end
+      object GLTFMemo: TMemo
+        Left = 166
+        Top = 11
+        Width = 624
+        Height = 129
+        ScrollBars = ssBoth
+        TabOrder = 1
+      end
+      object EditGLTFNodesBtn: TButton
+        Left = 280
+        Top = 146
+        Width = 113
+        Height = 25
+        Caption = 'Rename GLTF Nodes'
+        TabOrder = 2
+        OnClick = EditGLTFNodesBtnClick
+      end
+    end
   end
   object Memo1: TMemo
     Left = 8
-    Top = 240
-    Width = 652
-    Height = 285
+    Top = 312
+    Width = 798
+    Height = 276
     ScrollBars = ssBoth
     TabOrder = 1
     OnKeyPress = Memo1KeyPress
@@ -399,11 +449,20 @@ object Form1: TForm1
     TabOrder = 4
     OnClick = ValidateBtnClick
   end
+  object RollBackButton: TButton
+    Left = 704
+    Top = 1
+    Width = 75
+    Height = 25
+    Caption = 'Roll Back XML'
+    TabOrder = 5
+    OnClick = RollBackButtonClick
+  end
   object FileOpenDialog1: TFileOpenDialog
     FavoriteLinks = <>
     FileTypes = <>
     Options = []
-    Left = 608
+    Left = 664
     Top = 488
   end
   object OpenTextFileDialog1: TOpenTextFileDialog
